@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lightweight Chess — One File</title>
+
+  <!-- Tailwind CDN (small and convenient for dev / lightweight demo) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* Board square sizing */
+    .board { max-width: 640px; aspect-ratio: 1; }
+    .square { user-select: none; display:flex; align-items:center; justify-content:center; font-size: clamp(18px, 5vw, 36px); cursor: pointer; }
+    .square.light { background: #f0d9b5; }
+    .square.dark  { background: #b58863; }
+    .square.move { outline: 3px solid rgba(34,197,94,0.8); }
+    .square.capture { outline: 3px solid rgba(239,68,68,0.9); }
+    .square.selected { box-shadow: inset 0 0 0 3px rgba(99,102,241,0.55); }
+    .square.check { box-shadow: 0 0 0 6px rgba(239,68,68,0.45); }
+    .small { font-size: 12px; opacity: 0.9; }
+  </style>
+</head>
+<body class="bg-gray-50 text-slate-800 min-h-screen flex items-center justify-center p-6">
+
+  <main class="w-full max-w-4xl">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="text-2xl font-semibold">Lightweight Chess — Two players</h1>
+      <div class="text-sm text-gray-600">Click a piece to show moves → click a square to move</div>
+    </div>
+
+    <div class="flex gap-6 flex-col lg:flex-row">
+      <!-- Left: board -->
+      <div class="board grid grid-cols-8 border-2 border-slate-200 shadow-sm" id="board"></div>
+
+      <!-- Right: controls / status -->
+      <div class="w-full lg:w-64">
+        <div class="bg-white p-4 rounded-lg shadow-sm">
+          <div class="mb-2">
+            <div class="text-sm text-gray-500">Turn</div>
+            <div id="turnDisplay" class="text-lg font-medium mt-1">White</div>
+          </div>
+
+          <div class="mb-3">
+            <div class="text-sm text-gray-500">Status</div>
+            <div id="status" class="text-sm mt-1 small">Game in progress</div>
+          </div>
+
+          <div class="flex gap-2">
+            <button id="resetBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-sm py-2 rounded">Reset</button>
+            <button id="flipBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-sm py-2 rounded">Flip</button>
+          </div>
+
+          <div class="mt-4 text-xs text-gray-500 small">
+            Moves: <span id="movesCount">0</span>
+          </div>
+        </div>
+
+        <div class="bg-white mt-4 p-3 rounded-lg shadow-sm text-sm text-gray-600">
+          <div class="font-medium mb-2">Notes</div>
+          <ul class="list-disc pl-4">
+            <li>Local 2-player (same device)</li>
+            <li>Pawn promotion → auto-queen</li>
+            <li>No castling / en-passant implemented (keeps it compact)</li>
+            <li>Lightweight: Unicode piece glyphs, Tailwind CDN</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <footer class="mt-6 text-xs text-gray-500 small">
+      Pieces use Unicode glyphs (no heavy images). If you want piece sprites from free online sources we can swap later.
+    </footer>
+  </main>
+
+  <script>
+    // Minimal chess engine for legal move highlighting and basic check detection.
+    // Board representation: 8x8 array, row 0 is 8th rank (black side), row 7 is 1st rank (white side).
+    // Piece notation: uppercase = White, lowercase = Black. K/Q/R/B/N/P / k/q/r/b/n/p
+
+    const initialFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+    const boardEl = document.getElementById('board');
+    const turnDisplay = document.getElementById('turnDisplay');
+    const statusEl = document.getElementById('status');
+    const movesCountEl = document.getElementById('movesCount');
+    const resetBtn = document.getElementById('resetBtn');
+    const flipBtn = document.getElementById('flipBtn');
+
+    // Unicode glyphs
+    const glyphs = {
+      K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙',
+      k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟'
+    };
+
+    // state
+    let board = [];
+    let whiteToMove = true;
+    let selected = null; // {r,c}
+    let legalMoves = []; // [{r,c,capture:boolean}]
+    let flips = false;
+    let movesCount = 0;
+
+    // helpers
+    function fenToBoard(fen){
+      const rows = fen.split('/');
+      const b = [];
+      for (let r=0;r<8;r++){
+        const row = [];
+        let fenRow = rows[r];
+        for (let i=0;i<fenRow.length;i++){
+          const ch = fenRow[i];
+          if (/[1-8]/.test(ch)){
+            const n = parseInt(ch,10);
+            for(let k=0;k<n;k++) row.push(null);
+          } else row.push(ch);
+        }
+        b.push(row);
+      }
+      return b;
+    }
+
+    function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+    function isWhite(piece){ return piece && piece === piece.toUpperCase(); }
+    function isBlack(piece){ return piece && piece === piece.toLowerCase(); }
+    function sameColor(a,b){ if(!a||!b) return false; return (isWhite(a) && isWhite(b)) || (isBlack(a) && isBlack(b)); }
+
+    function locateKing(isWhiteSide){
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+        const p = board[r][c];
+        if (!p) continue;
+        if (isWhiteSide && p==='K') return [r,c];
+        if (!isWhiteSide && p==='k') return [r,c];
+      }
+      return null;
+    }
+
+    function cloneBoard(b){
+      return b.map(row => row.slice());
+    }
+
+    // Generate pseudo-legal moves (no castling/en-passant). We'll filter moves that leave own king in check.
+    function generateMovesFrom(r,c){
+      const piece = board[r][c];
+      if(!piece) return [];
+      const moves = [];
+      const isW = isWhite(piece);
+      const dir = isW ? -1 : 1; // pawn forward direction: white moves up (lower index rows)
+      const enemy = isW ? isBlack : isWhite;
+
+      const addMove = (rr,cc,cap=false) => {
+        if(inBounds(rr,cc)) moves.push({r:rr,c:cc,capture:cap});
+      };
+
+      const type = piece.toLowerCase();
+      if(type === 'p'){
+        // forward 1
+        const fr = r + dir;
+        if(inBounds(fr,c) && !board[fr][c]) {
+          addMove(fr,c,false);
+          // first double
+          const startRow = isW ? 6 : 1;
+          const fr2 = r + dir*2;
+          if(r === startRow && !board[fr2][c]) addMove(fr2,c,false);
+        }
+        // captures
+        for(const dc of [-1,1]){
+          const cr = r+dir, cc = c+dc;
+          if(inBounds(cr,cc) && board[cr][cc] && enemy(board[cr][cc])) addMove(cr,cc,true);
+        }
+      } else if(type === 'n'){
+        const steps = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+        for(const [dr,dc] of steps){
+          const rr=r+dr, cc=c+dc;
+          if(inBounds(rr,cc) && !sameColor(board[rr][cc], piece)) addMove(rr,cc, !!board[rr][cc]);
+        }
+      } else if(type === 'b' || type === 'r' || type === 'q'){
+        const dirs = [];
+        if(type==='b' || type==='q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+        if(type==='r' || type==='q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+        for(const [dr,dc] of dirs){
+          let rr=r+dr, cc=c+dc;
+          while(inBounds(rr,cc)){
+            if(!board[rr][cc]){
+              addMove(rr,cc,false);
+            } else {
+              if(!sameColor(board[rr][cc], piece)) addMove(rr,cc,true);
+              break;
+            }
+            rr += dr; cc += dc;
+          }
+        }
+      } else if(type==='k'){
+        for(let dr=-1;dr<=1;dr++){
+          for(let dc=-1;dc<=1;dc++){
+            if(dr===0 && dc===0) continue;
+            const rr=r+dr, cc=c+dc;
+            if(inBounds(rr,cc) && !sameColor(board[rr][cc], piece)) addMove(rr,cc, !!board[rr][cc]);
+          }
+        }
+      }
+
+      // filter out moves that leave own king in check
+      const legal = [];
+      for(const mv of moves){
+        const bcopy = cloneBoard(board);
+        const moving = bcopy[r][c];
+        bcopy[mv.r][mv.c] = moving;
+        bcopy[r][c] = null;
+
+        // pawn promotion auto queen
+        if(moving.toLowerCase() === 'p'){
+          if((isW && mv.r === 0) || (!isW && mv.r === 7)){
+            bcopy[mv.r][mv.c] = isW ? 'Q' : 'q';
+          }
+        }
+
+        // find our king
+        const kingPos = (isW ? locateKingOnBoard(bcopy,true) : locateKingOnBoard(bcopy,false));
+        if(!kingPos) continue; // improbable
+        const [kr,kc] = kingPos;
+        if(squareAttacked(bcopy, kr, kc, !isW)) {
+          // king would be in check => illegal
+        } else legal.push(mv);
+      }
+      return legal;
+    }
+
+    function locateKingOnBoard(b, isW){
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+        const p = b[r][c];
+        if(!p) continue;
+        if(isW && p==='K') return [r,c];
+        if(!isW && p==='k') return [r,c];
+      }
+      return null;
+    }
+
+    // Determine if a square (r,c) is attacked by color isWhiteAttacker
+    function squareAttacked(b, r, c, isWhiteAttacker){
+      const attackerIsWhite = isWhiteAttacker;
+      // Pawns
+      const pawnDir = attackerIsWhite ? -1 : 1;
+      for(const dc of [-1,1]){
+        const pr = r + pawnDir, pc = c + dc;
+        if(inBounds(pr,pc)){
+          const p = b[pr][pc];
+          if(p && (attackerIsWhite ? p==='P' : p==='p')) return true;
+        }
+      }
+      // Knights
+      const nsteps = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+      for(const [dr,dc] of nsteps){
+        const rr=r+dr, cc=c+dc;
+        if(inBounds(rr,cc)){
+          const p=b[rr][cc];
+          if(p && ((attackerIsWhite && p==='N') || (!attackerIsWhite && p==='n'))) return true;
+        }
+      }
+      // Sliding pieces (rook/queen)
+      const rookDirs = [[-1,0],[1,0],[0,-1],[0,1]];
+      for(const [dr,dc] of rookDirs){
+        let rr=r+dr, cc=c+dc;
+        while(inBounds(rr,cc)){
+          const p=b[rr][cc];
+          if(p){
+            if(attackerIsWhite && (p==='R' || p==='Q')) return true;
+            if(!attackerIsWhite && (p==='r' || p==='q')) return true;
+            break;
+          }
+          rr+=dr; cc+=dc;
+        }
+      }
+      // Bishop/queen
+      const bishopDirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+      for(const [dr,dc] of bishopDirs){
+        let rr=r+dr, cc=c+dc;
+        while(inBounds(rr,cc)){
+          const p=b[rr][cc];
+          if(p){
+            if(attackerIsWhite && (p==='B' || p==='Q')) return true;
+            if(!attackerIsWhite && (p==='b' || p==='q')) return true;
+            break;
+          }
+          rr+=dr; cc+=dc;
+        }
+      }
+      // King adjacency
+      for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+        if(dr===0 && dc===0) continue;
+        const rr=r+dr, cc=c+dc;
+        if(inBounds(rr,cc)){
+          const p=b[rr][cc];
+          if(p && ((attackerIsWhite && p==='K') || (!attackerIsWhite && p==='k'))) return true;
+        }
+      }
+      return false;
+    }
+
+    // Render
+    function render(){
+      boardEl.innerHTML = '';
+      const squareEls = [];
+      // build visual squares; optionally flipped
+      const rows = [...Array(8).keys()];
+      if(flips) rows.reverse();
+      for(const rVisual of rows){
+        const r = flips ? 7 - rVisual : rVisual;
+        for(let cVisual=0;cVisual<8;cVisual++){
+          const c = flips ? 7 - cVisual : cVisual;
+          const colorClass = ((r+c) % 2 === 0) ? 'light' : 'dark';
+          const sq = document.createElement('div');
+          sq.className = `square ${colorClass} p-1`;
+          sq.dataset.r = r; sq.dataset.c = c;
+          sq.id = `sq-${r}-${c}`;
+
+          // piece
+          const piece = board[r][c];
+          if(piece){
+            const span = document.createElement('div');
+            span.textContent = glyphs[piece] || piece;
+            span.className = isWhite(piece) ? 'select-none' : 'select-none';
+            sq.appendChild(span);
+          }
+
+          // file/rank labels (small)
+          const label = document.createElement('div');
+          label.className = 'absolute pointer-events-none';
+          // we won't display labels on main squares to keep it clean
+          sq.style.position = 'relative';
+
+          // events
+          sq.addEventListener('click', ()=>onSquareClick(r,c));
+          boardEl.appendChild(sq);
+          squareEls.push(sq);
+        }
+      }
+
+      // apply highlights for selected/legalmoves/check
+      if(selected){
+        const selEl = document.getElementById(`sq-${selected.r}-${selected.c}`);
+        if(selEl) selEl.classList.add('selected');
+      }
+      for(const m of legalMoves){
+        const el = document.getElementById(`sq-${m.r}-${m.c}`);
+        if(el) el.classList.add(m.capture ? 'capture' : 'move');
+      }
+
+      // if king in check highlight
+      const whiteKing = locateKing(true);
+      const blackKing = locateKing(false);
+      if(whiteKing && squareAttacked(board, whiteKing[0], whiteKing[1], false)) {
+        const el = document.getElementById(`sq-${whiteKing[0]}-${whiteKing[1]}`);
+        if(el) el.classList.add('check');
+      }
+      if(blackKing && squareAttacked(board, blackKing[0], blackKing[1], true)) {
+        const el = document.getElementById(`sq-${blackKing[0]}-${blackKing[1]}`);
+        if(el) el.classList.add('check');
+      }
+
+      turnDisplay.textContent = whiteToMove ? 'White' : 'Black';
+      movesCountEl.textContent = movesCount;
+    }
+
+    // Clicking squares
+    function onSquareClick(r,c){
+      const piece = board[r][c];
+      if(selected){
+        // if clicking one of legal moves -> move
+        const found = legalMoves.find(m => m.r === r && m.c === c);
+        if(found){
+          doMove(selected.r, selected.c, r, c);
+          selected = null; legalMoves = [];
+          render();
+          checkGameStatus();
+          return;
+        }
+      }
+
+      // otherwise, if there's a piece of current side, select it and show moves
+      if(piece && ((whiteToMove && isWhite(piece)) || (!whiteToMove && isBlack(piece)))){
+        selected = {r,c};
+        legalMoves = generateMovesFrom(r,c);
+      } else {
+        selected = null; legalMoves = [];
+      }
+      render();
+    }
+
+    function doMove(sr,sc, tr,tc){
+      const moving = board[sr][sc];
+      const captured = board[tr][tc];
+      board[tr][tc] = moving;
+      board[sr][sc] = null;
+
+      // pawn promotion auto to queen
+      if(moving.toLowerCase() === 'p'){
+        if(isWhite(moving) && tr === 0) board[tr][tc] = 'Q';
+        if(isBlack(moving) && tr === 7) board[tr][tc] = 'q';
+      }
+
+      whiteToMove = !whiteToMove;
+      movesCount++;
+      statusEl.textContent = 'Game in progress';
+    }
+
+    function checkGameStatus(){
+      // after move, check for check/checkmate or stale mate
+      const side = whiteToMove ? 'White' : 'Black';
+      const isW = whiteToMove;
+      const kingPos = locateKing(isW);
+      if(!kingPos){
+        statusEl.textContent = `${side} has no king — abnormal`;
+        return;
+      }
+      const inCheck = squareAttacked(board, kingPos[0], kingPos[1], !isW);
+      // check if any legal move exists for side
+      let anyLegal = false;
+      outer:
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+        const p = board[r][c];
+        if(!p) continue;
+        if((isW && isWhite(p)) || (!isW && isBlack(p))){
+          const mvs = generateMovesFrom(r,c);
+          if(mvs.length){ anyLegal = true; break outer; }
+        }
+      }
+      if(!anyLegal){
+        if(inCheck) {
+          statusEl.textContent = `Checkmate — ${isW ? 'Black' : 'White'} wins`;
+        } else {
+          statusEl.textContent = 'Stalemate — Draw';
+        }
+      } else {
+        statusEl.textContent = inCheck ? 'Check!' : 'Game in progress';
+      }
+    }
+
+    // init/reset
+    function reset(fen=initialFEN){
+      board = fenToBoard(fen);
+      whiteToMove = true;
+      selected = null;
+      legalMoves = [];
+      movesCount = 0;
+      render();
+      checkGameStatus();
+    }
+
+    // event listeners
+    resetBtn.addEventListener('click', ()=> reset());
+    flipBtn.addEventListener('click', ()=> { flips = !flips; render(); });
+
+    // initial
+    reset();
+
+    // keyboard helpers (optional): press Esc to cancel selection
+    window.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape'){ selected=null; legalMoves=[]; render(); }
+    });
+
+  </script>
+</body>
+</html>
+
