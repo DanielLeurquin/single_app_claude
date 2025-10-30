@@ -12,6 +12,10 @@
     .selected { box-shadow: inset 0 0 0 3px #7c3; }
     .valid-move { background: radial-gradient(circle, rgba(0,255,0,0.3) 25%, transparent 25%); }
     .piece { cursor: pointer; user-select: none; width: 80%; height: 80%; }
+    .promotion-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .promotion-modal.show { display: flex; }
+    .promotion-piece { width: 80px; height: 80px; cursor: pointer; transition: transform 0.2s; }
+    .promotion-piece:hover { transform: scale(1.1); }
   </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
@@ -194,7 +198,7 @@
     }
 
     function highlightMoves() {
-      initBoard();
+      clearHighlights();
       if (selected) {
         const sq = document.querySelector(`[data-row="${selected[0]}"][data-col="${selected[1]}"]`);
         sq.classList.add('selected');
