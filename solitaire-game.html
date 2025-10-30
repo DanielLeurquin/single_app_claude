@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solitaire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .card {
+            width: 80px;
+            height: 112px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            position: relative;
+            background-color: white;
+            border: 2px solid #ccc;
+        }
+        .card:hover {
+            transform: translateY(-8px);
+        }
+        .card-back {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 2px solid #fff;
+        }
+        .card-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 6px;
+        }
+        .tableau-pile {
+            min-height: 140px;
+            position: relative;
+        }
+        .card-in-pile {
+            position: absolute;
+            left: 0;
+        }
+        .selected {
+            border: 3px solid #fbbf24 !important;
+            box-shadow: 0 0 10px #fbbf24;
+        }
+        .empty-slot {
+            background-color: rgba(0,0,0,0.2);
+            border: 2px dashed rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body class="bg-green-800 min-h-screen p-4">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-white">Solitaire</h1>
+            <button onclick="newGame()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold">New Game</button>
+        </div>
+
+        <!-- Top Area: Stock, Waste, and Foundations -->
+        <div class="flex justify-between mb-8">
+            <div class="flex gap-4">
+                <div id="stock" onclick="drawCard()" class="card card-back flex items-center justify-center text-white text-2xl font-bold cursor-pointer hover:opacity-90">
+                    <span id="stock-count"></span>
+                </div>
+                <div id="waste" class="card empty-slot"></div>
+            </div>
+            <div class="flex gap-4">
+                <div id="foundation-0" class="card empty-slot"></div>
+                <div id="foundation-1" class="card empty-slot"></div>
+                <div id="foundation-2" class="card empty-slot"></div>
+                <div id="foundation-3" class="card empty-slot"></div>
+            </div>
+        </div>
+
+        <!-- Tableau -->
+        <div id="tableau" class="grid grid-cols-7 gap-4"></div>
+
+        <!-- Win Message -->
+        <div id="win-msg" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white p-8 rounded-lg text-center">
+                <h2 class="text-4xl font-bold text-green-600 mb-4">You Win! 🎉</h2>
+                <button onclick="newGame()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
+        const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        const values = {'A':1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13};
+        
+        let stock = [];
+        let waste = [];
+        let foundations = [[], [], [], []];
+        let tableau = [[], [], [], [], [], [], []];
+        let selected = null;
+
+        function createDeck() {
+            const deck = [];
+            for (let suit of suits) {
+                for (let rank of ranks) {
+                    deck.push({suit, rank, faceUp: false});
+                }
+            }
+            return deck.sort(() => Math.random() - 0.5);
+        }
+
+        function newGame() {
+            document.getElementById('win-msg').classList.add('hidden');
+            const deck = createDeck();
+            stock = deck.slice(28);
+            waste = [];
+            foundations = [[], [], [], []];
+            tableau = [[], [], [], [], [], [], []];
+            selected = null;
+
+            let idx = 0;
+            for (let i = 0; i < 7; i++) {
+                for (let j = i; j < 7; j++) {
+                    const card = deck[idx++];
+                    card.faceUp = (i === j);
+                    tableau[j].push(card);
+                }
+            }
+            render();
+        }
+
+        function getCardImg(card) {
+            const suitMap = {hearts: 'H', diamonds: 'D', clubs: 'C', spades: 'S'};
+            const rankMap = {'10': '0', 'J': 'J', 'Q': 'Q', 'K': 'K', 'A': 'A'};
+            const rankCode = rankMap[card.rank] || card.rank;
+            return `https://deckofcardsapi.com/static/img/${rankCode}${suitMap[card.suit]}.png`;
+        }
+
+        function createCardElement(card, onclick, isSelected = false) {
+            const div = document.createElement('div');
+            div.className = 'card' + (isSelected ? ' selected' : '');
+            
+            if (card.faceUp) {
+                const img = document.createElement('img');
+                img.src = getCardImg(card);
+                img.className = 'card-img';
+                img.alt = `${card.rank} of ${card.suit}`;
+                div.appendChild(img);
+                if (onclick) {
+                    div.onclick = onclick;
+                    div.style.cursor = 'pointer';
+                }
+            } else {
+                div.className = 'card card-back';
+            }
+            return div;
+        }
+
+        function drawCard() {
+            if (stock.length > 0) {
+                const card = stock.pop();
+                card.faceUp = true;
+                waste.push(card);
+                render();
+            } else if (waste.length > 0) {
+                stock = waste.reverse();
+                stock.forEach(c => c.faceUp = false);
+                waste = [];
+                render();
+            }
+        }
+
+        function canPlaceOnTableau(card, pile) {
+            if (pile.length === 0) return values[card.rank] === 13;
+            const top = pile[pile.length - 1];
+            if (!top.faceUp) return false;
+            const redSuits = ['hearts', 'diamonds'];
+            const isRed = c => redSuits.includes(c.suit);
+            return values[card.rank] === values[top.rank] - 1 && isRed(card) !== isRed(top);
+        }
+
+        function canPlaceOnFoundation(card, pile) {
+            if (pile.length === 0) return card.rank === 'A';
+            const top = pile[pile.length - 1];
+            return card.suit === top.suit && values[card.rank] === values[top.rank] + 1;
+        }
+
+        function moveToFoundation(from, fromIdx) {
+            for (let i = 0; i < 4; i++) {
+                const card = from === 'waste' ? waste[waste.length - 1] : tableau[fromIdx][tableau[fromIdx].length - 1];
+                if (card && canPlaceOnFoundation(card, foundations[i])) {
+                    foundations[i].push(from === 'waste' ? waste.pop() : tableau[fromIdx].pop());
+                    if (from === 'tableau' && tableau[fromIdx].length > 0) {
+                        tableau[fromIdx][tableau[fromIdx].length - 1].faceUp = true;
+                    }
+                    selected = null;
+                    render();
+                    checkWin();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function selectCard(from, idx, cardIdx) {
+            if (selected) {
+                if (selected.from === from && selected.idx === idx && selected.cardIdx === cardIdx) {
+                    if (!moveToFoundation(from, idx)) {
+                        selected = null;
+                        render();
+                    }
+                    return;
+                }
+
+                const cards = selected.from === 'waste' ? [waste[waste.length - 1]] : tableau[selected.idx].slice(selected.cardIdx);
+                
+                if (from === 'tableau' && cards.length > 0 && canPlaceOnTableau(cards[0], tableau[idx])) {
+                    tableau[idx].push(...cards);
+                    if (selected.from === 'waste') {
+                        waste.pop();
+                    } else {
+                        tableau[selected.idx].splice(selected.cardIdx);
+                        if (tableau[selected.idx].length > 0) {
+                            tableau[selected.idx][tableau[selected.idx].length - 1].faceUp = true;
+                        }
+                    }
+                    selected = null;
+                    render();
+                } else {
+                    selected = null;
+                    render();
+                }
+            } else {
+                selected = {from, idx, cardIdx};
+                render();
+            }
+        }
+
+        function checkWin() {
+            if (foundations.every(f => f.length === 13)) {
+                setTimeout(() => {
+                    document.getElementById('win-msg').classList.remove('hidden');
+                }, 300);
+            }
+        }
+
+        function render() {
+            document.getElementById('stock-count').textContent = stock.length || '↻';
+            
+            const wasteEl = document.getElementById('waste');
+            wasteEl.innerHTML = '';
+            wasteEl.className = 'card empty-slot';
+            if (waste.length > 0) {
+                const card = waste[waste.length - 1];
+                const isSelected = selected && selected.from === 'waste';
+                const cardEl = createCardElement(card, () => selectCard('waste', 0, 0), isSelected);
+                wasteEl.className = 'card';
+                wasteEl.appendChild(cardEl.firstChild);
+                if (isSelected) wasteEl.classList.add('selected');
+                wasteEl.onclick = () => selectCard('waste', 0, 0);
+            }
+
+            for (let i = 0; i < 4; i++) {
+                const foundEl = document.getElementById(`foundation-${i}`);
+                foundEl.innerHTML = '';
+                foundEl.className = 'card empty-slot';
+                if (foundations[i].length > 0) {
+                    const card = foundations[i][foundations[i].length - 1];
+                    const cardEl = createCardElement(card);
+                    foundEl.className = 'card';
+                    foundEl.appendChild(cardEl.firstChild);
+                }
+            }
+
+            const tableauEl = document.getElementById('tableau');
+            tableauEl.innerHTML = '';
+            for (let i = 0; i < 7; i++) {
+                const pile = document.createElement('div');
+                pile.className = 'tableau-pile';
+                
+                if (tableau[i].length === 0) {
+                    const emptySlot = document.createElement('div');
+                    emptySlot.className = 'card empty-slot card-in-pile';
+                    emptySlot.style.top = '0';
+                    emptySlot.onclick = () => selectCard('tableau', i, 0);
+                    pile.appendChild(emptySlot);
+                }
+                
+                tableau[i].forEach((card, j) => {
+                    const isSelected = selected && selected.from === 'tableau' && selected.idx === i && selected.cardIdx === j;
+                    const cardEl = createCardElement(card, card.faceUp ? () => selectCard('tableau', i, j) : null, isSelected);
+                    cardEl.classList.add('card-in-pile');
+                    cardEl.style.top = `${j * 22}px`;
+                    pile.appendChild(cardEl);
+                });
+                
+                pile.style.height = `${Math.max(140, tableau[i].length * 22 + 112)}px`;
+                tableauEl.appendChild(pile);
+            }
+        }
+
+        newGame();
+    </script>
+</body>
+</html>
