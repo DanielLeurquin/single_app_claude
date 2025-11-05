@@ -187,10 +187,24 @@
                 uniqueValues.forEach((key, index) => {
                     const ws = XLSX.utils.aoa_to_sheet(groups[key]);
                     const wb = XLSX.utils.book_new();
+                    
+                    // Add proper Excel metadata
+                    wb.Props = {
+                        Title: `Split by ${headers[columnIndex]}`,
+                        Subject: `Data for ${key}`,
+                        Author: "Excel Splitter",
+                        CreatedDate: new Date()
+                    };
+                    
                     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
                     
-                    // Generate Excel file
-                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    // Generate Excel file with proper options
+                    const wbout = XLSX.write(wb, { 
+                        bookType: 'xlsx', 
+                        type: 'array',
+                        compression: true,
+                        Props: wb.Props
+                    });
                     
                     // Sanitize filename
                     const sanitizedKey = String(key).replace(/[^a-z0-9]/gi, '_').substring(0, 50);
