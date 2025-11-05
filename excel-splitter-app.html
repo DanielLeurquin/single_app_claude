@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel File Splitter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2 text-center">Excel File Splitter</h1>
+            <p class="text-gray-600 text-center mb-8">Upload an Excel file and split it by column values</p>
+            
+            <!-- Drag and Drop Area -->
+            <div id="dropZone" class="border-4 border-dashed border-indigo-300 rounded-xl p-12 text-center transition-all hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer mb-6">
+                <svg class="mx-auto h-16 w-16 text-indigo-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <p class="text-lg text-gray-700 font-semibold mb-2">Drag and drop your Excel file here</p>
+                <p class="text-sm text-gray-500 mb-4">or</p>
+                <label for="fileInput" class="bg-indigo-600 text-white px-6 py-3 rounded-lg cursor-pointer hover:bg-indigo-700 transition-colors inline-block font-semibold">
+                    Browse Files
+                </label>
+                <input type="file" id="fileInput" accept=".xlsx,.xls" class="hidden">
+                <p class="text-xs text-gray-400 mt-4">Supports .xlsx and .xls files</p>
+            </div>
+
+            <!-- File Info -->
+            <div id="fileInfo" class="hidden mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p class="text-sm text-gray-700"><span class="font-semibold">File:</span> <span id="fileName"></span></p>
+                <p class="text-sm text-gray-700"><span class="font-semibold">Rows:</span> <span id="rowCount"></span></p>
+            </div>
+
+            <!-- Column Selection -->
+            <div id="columnSelection" class="hidden mb-6">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Select column to split by:</label>
+                <select id="columnDropdown" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    <option value="">-- Choose a column --</option>
+                </select>
+            </div>
+
+            <!-- Split Button -->
+            <button id="splitButton" class="hidden w-full bg-green-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                Split and Download Files
+            </button>
+
+            <!-- Progress -->
+            <div id="progress" class="hidden mt-6">
+                <div class="bg-gray-200 rounded-full h-4 overflow-hidden">
+                    <div id="progressBar" class="bg-indigo-600 h-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p id="progressText" class="text-center text-sm text-gray-600 mt-2"></p>
+            </div>
+
+            <!-- Success Message -->
+            <div id="successMessage" class="hidden mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p class="text-green-800 font-semibold text-center">✓ Files generated successfully!</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let workbookData = null;
+        let worksheetData = null;
+        let headers = [];
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const rowCount = document.getElementById('rowCount');
+        const columnSelection = document.getElementById('columnSelection');
+        const columnDropdown = document.getElementById('columnDropdown');
+        const splitButton = document.getElementById('splitButton');
+        const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const successMessage = document.getElementById('successMessage');
+
+        // Drag and drop handlers
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('bg-indigo-100', 'border-indigo-600');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('bg-indigo-100', 'border-indigo-600');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('bg-indigo-100', 'border-indigo-600');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) {
+                alert('Please upload a valid Excel file (.xlsx or .xls)');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    workbookData = XLSX.read(data, { type: 'array' });
+                    
+                    // Get first sheet
+                    const firstSheet = workbookData.Sheets[workbookData.SheetNames[0]];
+                    worksheetData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    
+                    // Get headers (first row)
+                    headers = worksheetData[0];
+                    
+                    // Display file info
+                    fileName.textContent = file.name;
+                    rowCount.textContent = worksheetData.length - 1; // Exclude header
+                    fileInfo.classList.remove('hidden');
+                    
+                    // Populate dropdown
+                    columnDropdown.innerHTML = '<option value="">-- Choose a column --</option>';
+                    headers.forEach((header, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = header;
+                        columnDropdown.appendChild(option);
+                    });
+                    
+                    columnSelection.classList.remove('hidden');
+                    successMessage.classList.add('hidden');
+                } catch (error) {
+                    alert('Error reading file: ' + error.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        columnDropdown.addEventListener('change', () => {
+            if (columnDropdown.value !== '') {
+                splitButton.classList.remove('hidden');
+            } else {
+                splitButton.classList.add('hidden');
+            }
+        });
+
+        splitButton.addEventListener('click', async () => {
+            const columnIndex = parseInt(columnDropdown.value);
+            
+            progress.classList.remove('hidden');
+            successMessage.classList.add('hidden');
+            progressBar.style.width = '0%';
+            progressText.textContent = 'Processing...';
+            
+            try {
+                // Group data by unique values in selected column
+                const groups = {};
+                
+                for (let i = 1; i < worksheetData.length; i++) {
+                    const row = worksheetData[i];
+                    const key = row[columnIndex] || 'empty';
+                    
+                    if (!groups[key]) {
+                        groups[key] = [headers];
+                    }
+                    groups[key].push(row);
+                }
+                
+                progressBar.style.width = '30%';
+                progressText.textContent = `Found ${Object.keys(groups).length} unique values...`;
+                
+                // Create zip file
+                const zip = new JSZip();
+                const uniqueValues = Object.keys(groups);
+                
+                uniqueValues.forEach((key, index) => {
+                    const ws = XLSX.utils.aoa_to_sheet(groups[key]);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+                    
+                    // Generate Excel file
+                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    
+                    // Sanitize filename
+                    const sanitizedKey = String(key).replace(/[^a-z0-9]/gi, '_').substring(0, 50);
+                    zip.file(`${sanitizedKey}.xlsx`, wbout);
+                    
+                    const percent = 30 + (index + 1) / uniqueValues.length * 60;
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = `Creating files: ${index + 1}/${uniqueValues.length}`;
+                });
+                
+                progressBar.style.width = '90%';
+                progressText.textContent = 'Generating zip file...';
+                
+                // Generate and download zip
+                const content = await zip.generateAsync({ type: 'blob' });
+                
+                progressBar.style.width = '100%';
+                progressText.textContent = 'Complete!';
+                
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = 'split_files.zip';
+                link.click();
+                
+                setTimeout(() => {
+                    progress.classList.add('hidden');
+                    successMessage.classList.remove('hidden');
+                }, 500);
+                
+            } catch (error) {
+                alert('Error splitting files: ' + error.message);
+                progress.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
