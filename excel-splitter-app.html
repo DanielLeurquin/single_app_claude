@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel File Splitter</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen p-8">
@@ -177,14 +176,14 @@
                     groups[key].push(row);
                 }
                 
-                progressBar.style.width = '30%';
+                progressBar.style.width = '20%';
                 progressText.textContent = `Found ${Object.keys(groups).length} unique values...`;
                 
-                // Create zip file
-                const zip = new JSZip();
                 const uniqueValues = Object.keys(groups);
                 
-                uniqueValues.forEach((key, index) => {
+                // Download each file sequentially with a small delay
+                for (let index = 0; index < uniqueValues.length; index++) {
+                    const key = uniqueValues[index];
                     const ws = XLSX.utils.aoa_to_sheet(groups[key]);
                     const wb = XLSX.utils.book_new();
                     
@@ -198,7 +197,7 @@
                     
                     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
                     
-                    // Generate Excel file with proper options
+                    // Generate Excel file
                     const wbout = XLSX.write(wb, { 
                         bookType: 'xlsx', 
                         type: 'array',
@@ -206,28 +205,29 @@
                         Props: wb.Props
                     });
                     
+                    // Create blob and download
+                    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    
                     // Sanitize filename
                     const sanitizedKey = String(key).replace(/[^a-z0-9]/gi, '_').substring(0, 50);
-                    zip.file(`${sanitizedKey}.xlsx`, wbout);
+                    link.href = url;
+                    link.download = `${sanitizedKey}.xlsx`;
+                    link.click();
                     
-                    const percent = 30 + (index + 1) / uniqueValues.length * 60;
+                    // Clean up URL object
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+                    const percent = 20 + (index + 1) / uniqueValues.length * 80;
                     progressBar.style.width = percent + '%';
-                    progressText.textContent = `Creating files: ${index + 1}/${uniqueValues.length}`;
-                });
-                
-                progressBar.style.width = '90%';
-                progressText.textContent = 'Generating zip file...';
-                
-                // Generate and download zip
-                const content = await zip.generateAsync({ type: 'blob' });
+                    progressText.textContent = `Downloading: ${index + 1}/${uniqueValues.length}`;
+                    
+                    // Small delay between downloads to avoid browser blocking
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
                 
                 progressBar.style.width = '100%';
                 progressText.textContent = 'Complete!';
-                
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(content);
-                link.download = 'split_files.zip';
-                link.click();
                 
                 setTimeout(() => {
                     progress.classList.add('hidden');
