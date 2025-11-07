@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D3.js Graph Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">D3.js Graph Visualization</h1>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    CSV File Path
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" id="csvPath" value="data.csv" 
+                        class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter path to your CSV file (e.g., data.csv)">
+                    <button id="loadBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Load CSV
+                    </button>
+                </div>
+                <p class="mt-2 text-sm text-gray-500">
+                    CSV should have columns: prn, nom, label, age, encours, contri, deceased, color
+                </p>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Or Upload CSV File
+                </label>
+                <input type="file" id="csvFile" accept=".csv" 
+                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+
+            <div class="flex gap-4 mb-4">
+                <button id="resetBtn" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+                    Reset View
+                </button>
+                <button id="sampleBtn" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                    Load Sample Data
+                </button>
+            </div>
+            
+            <div id="status" class="hidden mt-2 p-3 rounded"></div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div id="graph" class="w-full" style="height: 600px;"></div>
+        </div>
+
+        <div id="nodeInfo" class="mt-4 bg-white rounded-lg shadow-lg p-6 hidden">
+            <h2 class="text-xl font-bold mb-3">Node Information</h2>
+            <div id="nodeDetails" class="grid grid-cols-2 gap-3"></div>
+        </div>
+    </div>
+
+    <script>
+        let simulation;
+        let svg;
+        let g;
+        let nodes = [];
+        let links = [];
+
+        function initGraph() {
+            const container = d3.select("#graph");
+            container.selectAll("*").remove();
+
+            const width = container.node().getBoundingClientRect().width;
+            const height = 600;
+
+            svg = container.append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            // Add zoom behavior
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 10])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                });
+
+            svg.call(zoom);
+
+            g = svg.append("g");
+
+            // Add arrow marker for directed graphs
+            svg.append("defs").append("marker")
+                .attr("id", "arrowhead")
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 20)
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("d", "M0,-5L10,0L0,5")
+                .attr("fill", "#999");
+
+            return { width, height };
+        }
+
+        function createGraph(data) {
+            nodes = data.map(d => ({
+                id: d.prn,
+                prn: d.prn,
+                nom: d.nom,
+                label: d.label,
+                age: d.age,
+                encours: d.encours,
+                contri: d.contri,
+                deceased: d.deceased,
+                color: d.color || "#3b82f6"
+            }));
+
+            // Create some sample links based on data
+            links = [];
+            for (let i = 0; i < nodes.length - 1; i++) {
+                if (Math.random() > 0.5) {
+                    links.push({
+                        source: nodes[i].id,
+                        target: nodes[i + 1].id
+                    });
+                }
+            }
+
+            const { width, height } = initGraph();
+
+            simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collision", d3.forceCollide().radius(40));
+
+            // Create links
+            const link = g.append("g")
+                .selectAll("line")
+                .data(links)
+                .enter().append("line")
+                .attr("stroke", "#999")
+                .attr("stroke-width", 2)
+                .attr("marker-end", "url(#arrowhead)");
+
+            // Create node groups
+            const node = g.append("g")
+                .selectAll("g")
+                .data(nodes)
+                .enter().append("g")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended))
+                .on("click", showNodeInfo);
+
+            // Add circles
+            node.append("circle")
+                .attr("r", 20)
+                .attr("fill", d => d.color)
+                .attr("stroke", d => d.deceased === "true" || d.deceased === "1" ? "#ef4444" : "#fff")
+                .attr("stroke-width", d => d.deceased === "true" || d.deceased === "1" ? 4 : 2)
+                .attr("opacity", 0.9);
+
+            // Add labels
+            node.append("text")
+                .text(d => d.label || d.nom)
+                .attr("x", 0)
+                .attr("y", 30)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "12px")
+                .attr("font-weight", "bold")
+                .attr("fill", "#333");
+
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node.attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+        }
+
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        function showNodeInfo(event, d) {
+            const info = document.getElementById("nodeInfo");
+            const details = document.getElementById("nodeDetails");
+            
+            details.innerHTML = `
+                <div class="col-span-2 font-bold text-lg mb-2">${d.label || d.nom}</div>
+                <div class="text-gray-600">PRN:</div><div class="font-semibold">${d.prn}</div>
+                <div class="text-gray-600">Nom:</div><div class="font-semibold">${d.nom}</div>
+                <div class="text-gray-600">Age:</div><div class="font-semibold">${d.age}</div>
+                <div class="text-gray-600">Encours:</div><div class="font-semibold">${d.encours}</div>
+                <div class="text-gray-600">Contribution:</div><div class="font-semibold">${d.contri}</div>
+                <div class="text-gray-600">Deceased:</div><div class="font-semibold">${d.deceased}</div>
+            `;
+            
+            info.classList.remove("hidden");
+        }
+
+        function loadSampleData() {
+            const sampleData = [
+                { prn: "1", nom: "Dupont", label: "Jean", age: "45", encours: "5000", contri: "200", deceased: "false", color: "#3b82f6" },
+                { prn: "2", nom: "Martin", label: "Marie", age: "38", encours: "3500", contri: "150", deceased: "false", color: "#10b981" },
+                { prn: "3", nom: "Durand", label: "Pierre", age: "52", encours: "7000", contri: "300", deceased: "true", color: "#f59e0b" },
+                { prn: "4", nom: "Petit", label: "Sophie", age: "29", encours: "2000", contri: "100", deceased: "false", color: "#8b5cf6" },
+                { prn: "5", nom: "Moreau", label: "Luc", age: "61", encours: "9000", contri: "400", deceased: "false", color: "#ec4899" }
+            ];
+            createGraph(sampleData);
+        }
+
+        document.getElementById("csvFile").addEventListener("change", function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                Papa.parse(file, {
+                    header: true,
+                    dynamicTyping: false,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        if (results.data.length > 0) {
+                            createGraph(results.data);
+                        } else {
+                            alert("No data found in CSV file");
+                        }
+                    },
+                    error: function(error) {
+                        alert("Error parsing CSV: " + error.message);
+                    }
+                });
+            }
+        });
+
+        document.getElementById("resetBtn").addEventListener("click", function() {
+            if (nodes.length > 0) {
+                createGraph(nodes.map(n => ({
+                    prn: n.prn,
+                    nom: n.nom,
+                    label: n.label,
+                    age: n.age,
+                    encours: n.encours,
+                    contri: n.contri,
+                    deceased: n.deceased,
+                    color: n.color
+                })));
+            }
+        });
+
+        document.getElementById("sampleBtn").addEventListener("click", loadSampleData);
+
+        // Initialize with sample data
+        loadSampleData();
+    </script>
+</body>
+</html>
