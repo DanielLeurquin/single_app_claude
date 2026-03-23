@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Organisation Chart</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Playfair Display', 'serif'],
+            body: ['Source Sans 3', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+    body { font-family: 'Source Sans 3', sans-serif; }
+
+    svg { cursor: grab; user-select: none; }
+    svg:active { cursor: grabbing; }
+
+    .node-g { cursor: pointer; }
+    .node-card { transition: filter 0.15s ease; }
+    .node-card:hover { filter: drop-shadow(0 6px 16px rgba(0,0,0,0.13)); }
+
+    .link-path { fill: none; stroke: #94a3b8; stroke-width: 1.5px; }
+
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 50;
+    }
+    #tooltip.show { opacity: 1; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .chart-area { animation: fadeUp 0.35s ease both; }
+  </style>
+</head>
+
+<body class="bg-slate-50">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useEffect, useRef, useState, useCallback } = React;
+
+/* ── Org data ─────────────────────────────────────────── */
+const ORG = {
+  id:1, name:"Sarah Chen", title:"Chief Executive Officer", dept:"Executive", location:"San Francisco",
+  children:[
+    { id:2, name:"Marcus Rivera", title:"Chief Technology Officer", dept:"Engineering", location:"Austin",
+      children:[
+        { id:7, name:"Priya Nair", title:"VP Engineering", dept:"Engineering", location:"Austin",
+          children:[
+            { id:14, name:"Leon Kim",    title:"Sr. Backend Engineer",  dept:"Engineering", location:"Austin" },
+            { id:15, name:"Aisha Patel", title:"Sr. Frontend Engineer", dept:"Engineering", location:"Remote" },
+            { id:16, name:"Tom Wallace", title:"DevOps Engineer",        dept:"Engineering", location:"Remote" },
+          ]},
+        { id:8, name:"Chris Okafor", title:"Head of Security", dept:"Engineering", location:"Austin",
+          children:[
+            { id:17, name:"Nina Rossi", title:"Security Analyst",  dept:"Engineering", location:"Austin" },
+            { id:18, name:"Joe Tanaka", title:"Pen Test Engineer",  dept:"Engineering", location:"Remote" },
+          ]},
+      ]},
+    { id:3, name:"Elena Vasquez", title:"Chief Product Officer", dept:"Product", location:"New York",
+      children:[
+        { id:9, name:"David Park", title:"VP Product", dept:"Product", location:"New York",
+          children:[
+            { id:19, name:"Leah Brooks", title:"Product Manager", dept:"Product", location:"New York" },
+            { id:20, name:"Sam Torres",  title:"Product Manager", dept:"Product", location:"Remote"   },
+          ]},
+        { id:10, name:"Fatima Al-Amin", title:"Head of UX Research", dept:"Design", location:"New York",
+          children:[
+            { id:21, name:"Yuki Sato",  title:"UX Researcher", dept:"Design", location:"Tokyo"    },
+            { id:22, name:"Oscar Bell", title:"UX Researcher", dept:"Design", location:"New York" },
+          ]},
+      ]},
+    { id:4, name:"James Whitmore", title:"Chief Design Officer", dept:"Design", location:"London",
+      children:[
+        { id:11, name:"Mia Johansson", title:"Lead Visual Designer", dept:"Design", location:"London" },
+        { id:12, name:"Ravi Sharma",   title:"Motion Designer",       dept:"Design", location:"Remote" },
+      ]},
+    { id:5, name:"Olivia Grant", title:"Chief Marketing Officer", dept:"Marketing", location:"Chicago",
+      children:[
+        { id:13, name:"Tyler Nguyen", title:"Growth Lead", dept:"Marketing", location:"Chicago",
+          children:[
+            { id:23, name:"Cara Diaz", title:"Growth Analyst", dept:"Marketing", location:"Chicago" },
+            { id:24, name:"Ben Moore", title:"SEO Specialist",  dept:"Marketing", location:"Remote"  },
+          ]},
+      ]},
+    { id:6, name:"Nathan Adeyemi", title:"Chief Financial Officer", dept:"Finance", location:"San Francisco",
+      children:[
+        { id:25, name:"Isla Crawford", title:"Finance Director",   dept:"Finance", location:"San Francisco" },
+        { id:26, name:"Roy Kim",        title:"Financial Analyst",  dept:"Finance", location:"Remote"        },
+      ]},
+  ]
+};
+
+/* ── Department colours ───────────────────────────────── */
+const DEPT = {
+  Executive:   { stripe:"#3b82f6", badge:"#dbeafe", badgeTxt:"#1e40af", dot:"#3b82f6",  border:"#bfdbfe" },
+  Engineering: { stripe:"#22c55e", badge:"#dcfce7", badgeTxt:"#166534", dot:"#22c55e",  border:"#bbf7d0" },
+  Product:     { stripe:"#8b5cf6", badge:"#ede9fe", badgeTxt:"#5b21b6", dot:"#8b5cf6",  border:"#ddd6fe" },
+  Design:      { stripe:"#ec4899", badge:"#fce7f3", badgeTxt:"#9d174d", dot:"#ec4899",  border:"#fbcfe8" },
+  Marketing:   { stripe:"#f97316", badge:"#ffedd5", badgeTxt:"#9a3412", dot:"#f97316",  border:"#fed7aa" },
+  Finance:     { stripe:"#eab308", badge:"#fef9c3", badgeTxt:"#713f12", dot:"#eab308",  border:"#fef08a" },
+  Operations:  { stripe:"#14b8a6", badge:"#ccfbf1", badgeTxt:"#134e4a", dot:"#14b8a6",  border:"#99f6e4" },
+};
+
+const NW = 196;   // node width
+const NH = 78;    // node height
+const HGAP = 36;  // horizontal sibling gap
+const VGAP = 68;  // vertical level gap
+
+function initials(name) { return name.split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase(); }
+function clip(s, n)     { return s.length > n ? s.slice(0, n-1) + "…" : s; }
+
+/* Orthogonal elbow connector */
+function elbow(sx, sy, tx, ty) {
+  const midY = sy + NH + VGAP / 2;
+  return `M${sx},${sy + NH} L${sx},${midY} L${tx},${midY} L${tx},${ty}`;
+}
+
+/* ── Component ────────────────────────────────────────── */
+function OrgChart() {
+  const svgRef = useRef(null);
+  const gRef   = useRef(null);
+  const zoomRef = useRef(null);
+  const [collapsed, setCollapsed] = useState({});
+  const [tip, setTip] = useState({ show: false, x: 0, y: 0, d: null });
+
+  /* Prune tree based on collapsed state */
+  const buildTree = useCallback(() => {
+    function prune(n) {
+      const c = { ...n };
+      if (!collapsed[n.id] && n.children?.length) c.children = n.children.map(prune);
+      else c.children = [];
+      return c;
+    }
+    return prune(ORG);
+  }, [collapsed]);
+
+  function hasKids(id) {
+    function find(n) {
+      if (n.id === id) return !!(n.children?.length);
+      return n.children?.some(find) ?? false;
+    }
+    return find(ORG);
+  }
+
+  /* Init zoom once */
+  useEffect(() => {
+    const svg = d3.select(svgRef.current);
+    const g   = d3.select(gRef.current);
+    const W   = svgRef.current.clientWidth;
+
+    const zoom = d3.zoom().scaleExtent([0.18, 2]).on("zoom", e => g.attr("transform", e.transform));
+    zoomRef.current = zoom;
+    svg.call(zoom);
+
+    const init = d3.zoomIdentity.translate(W / 2, 48).scale(0.68);
+    svg.call(zoom.transform, init);
+    g.attr("transform", init.toString());
+  }, []);
+
+  /* Redraw nodes/links */
+  useEffect(() => {
+    const g   = d3.select(gRef.current);
+    const svg = d3.select(svgRef.current);
+    g.selectAll("*").remove();
+
+    const root = d3.hierarchy(buildTree());
+    d3.tree().nodeSize([NW + HGAP, NH + VGAP]).separation((a,b) => a.parent===b.parent ? 1 : 1.25)(root);
+
+    /* ── Links ── */
+    g.append("g").selectAll("path")
+      .data(root.links()).join("path")
+      .attr("class", "link-path")
+      .attr("d", l => elbow(l.source.x, l.source.y, l.target.x, l.target.y));
+
+    /* ── Nodes ── */
+    const ng = g.append("g").selectAll("g")
+      .data(root.descendants()).join("g")
+      .attr("class", "node-g node-card")
+      .attr("transform", d => `translate(${d.x - NW/2},${d.y})`)
+      .on("click", (_, d) => {
+        if (hasKids(d.data.id)) setCollapsed(p => ({ ...p, [d.data.id]: !p[d.data.id] }));
+      })
+      .on("mousemove", (e, d) => setTip({ show:true, x:e.clientX+14, y:e.clientY-10, d:d.data }))
+      .on("mouseleave", () => setTip(t => ({ ...t, show:false })));
+
+    ng.each(function(d) {
+      const el  = d3.select(this);
+      const p   = DEPT[d.data.dept] || DEPT.Executive;
+      const isR = d.depth === 0;
+
+      /* Drop-shadow filter */
+      const fid = `f${d.data.id}`;
+      let defs = svg.select("defs");
+      if (defs.empty()) defs = svg.insert("defs", ":first-child");
+      if (defs.select(`#${fid}`).empty()) {
+        const flt = defs.append("filter").attr("id", fid)
+          .attr("x","-20%").attr("y","-20%").attr("width","140%").attr("height","140%");
+        flt.append("feDropShadow")
+          .attr("dx",0).attr("dy", isR?3:1.5).attr("stdDeviation", isR?5:3)
+          .attr("flood-color","rgba(15,23,42,0.10)");
+      }
+
+      /* Card */
+      el.append("rect")
+        .attr("width", NW).attr("height", NH).attr("rx", 5)
+        .attr("fill","#ffffff")
+        .attr("stroke", isR ? p.stripe : p.border)
+        .attr("stroke-width", isR ? 2 : 1)
+        .attr("filter",`url(#${fid})`);
+
+      /* Top colour stripe */
+      el.append("rect").attr("width", NW).attr("height", 5).attr("rx", 5).attr("fill", p.stripe);
+      el.append("rect").attr("width", NW).attr("height", 3).attr("y", 2).attr("fill", p.stripe);
+
+      /* Avatar */
+      el.append("circle")
+        .attr("cx", 29).attr("cy", NH/2 + 5).attr("r", 17)
+        .attr("fill", p.badge).attr("stroke", p.border).attr("stroke-width", 1);
+      el.append("text")
+        .attr("x", 29).attr("y", NH/2 + 10)
+        .attr("text-anchor","middle")
+        .attr("fill", p.badgeTxt)
+        .attr("font-family","Playfair Display, serif")
+        .attr("font-size", 11).attr("font-weight", 700)
+        .text(initials(d.data.name));
+
+      /* Name */
+      el.append("text")
+        .attr("x", 54).attr("y", NH/2 + 2)
+        .attr("fill","#1e293b")
+        .attr("font-family","Playfair Display, serif")
+        .attr("font-size", 12).attr("font-weight", 700)
+        .text(clip(d.data.name, 18));
+
+      /* Title */
+      el.append("text")
+        .attr("x", 54).attr("y", NH/2 + 17)
+        .attr("fill","#64748b")
+        .attr("font-family","Source Sans 3, sans-serif")
+        .attr("font-size", 10)
+        .text(clip(d.data.title, 26));
+
+      /* Expand / collapse toggle */
+      if (hasKids(d.data.id)) {
+        const isC = !!collapsed[d.data.id];
+        el.append("rect")
+          .attr("x", NW/2 - 9).attr("y", NH - 9)
+          .attr("width", 18).attr("height", 18).attr("rx", 3)
+          .attr("fill","#fff").attr("stroke", p.stripe).attr("stroke-width", 1.5);
+        el.append("text")
+          .attr("x", NW/2).attr("y", NH + 5)
+          .attr("text-anchor","middle")
+          .attr("fill", p.stripe)
+          .attr("font-size", 14).attr("font-family","monospace").attr("font-weight", 700)
+          .text(isC ? "+" : "−");
+      }
+    });
+
+  }, [collapsed, buildTree]);
+
+  /* Collapse helpers */
+  function collapseAll() {
+    const ids = {};
+    function walk(n) { if(n.children?.length){ ids[n.id]=true; n.children.forEach(walk); } }
+    walk(ORG);
+    setCollapsed(ids);
+  }
+
+  const tt  = tip.d;
+  const pal = tt ? (DEPT[tt.dept] || DEPT.Executive) : {};
+
+  return (
+    <div className="flex flex-col h-screen w-screen bg-slate-50 font-body">
+
+      {/* ── Header ── */}
+      <header className="flex items-center justify-between px-8 py-3 bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+        <div className="flex items-center gap-4">
+          {/* Emblem */}
+          <div className="w-8 h-8 rounded border border-slate-200 flex items-center justify-center bg-slate-50">
+            <svg viewBox="0 0 20 20" className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="7" y="1" width="6" height="5" rx="1"/>
+              <rect x="1" y="13" width="6" height="5" rx="1"/>
+              <rect x="13" y="13" width="6" height="5" rx="1"/>
+              <line x1="10" y1="6" x2="10" y2="10"/>
+              <line x1="4"  y1="10" x2="16" y2="10"/>
+              <line x1="4"  y1="10" x2="4"  y2="13"/>
+              <line x1="16" y1="10" x2="16" y2="13"/>
+            </svg>
+          </div>
+          <div>
+            <h1 className="font-display text-lg font-bold text-slate-800 leading-tight">Organisation Chart</h1>
+            <p className="text-xs text-slate-400 tracking-widest uppercase mt-0.5">Acme Corporation · 2025</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={() => setCollapsed({})}
+            className="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded text-slate-600 bg-white hover:bg-slate-50 transition-colors">
+            Expand All
+          </button>
+          <button onClick={collapseAll}
+            className="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded text-slate-600 bg-white hover:bg-slate-50 transition-colors">
+            Collapse All
+          </button>
+        </div>
+      </header>
+
+      {/* ── Chart area ── */}
+      <div className="chart-area flex-1 relative overflow-hidden">
+        <svg ref={svgRef} className="w-full h-full">
+          <defs/>
+          <g ref={gRef}/>
+        </svg>
+
+        {/* Legend */}
+        <div className="absolute bottom-5 left-5 bg-white border border-slate-200 rounded-lg shadow-sm p-3.5 text-xs">
+          <p className="font-display font-bold text-slate-600 mb-2 uppercase tracking-widest text-xs">Departments</p>
+          {Object.entries(DEPT).map(([dept, p]) => (
+            <div key={dept} className="flex items-center gap-2 mb-1.5 last:mb-0">
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: p.stripe }}/>
+              <span className="text-slate-500">{dept}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Hints */}
+        <div className="absolute bottom-5 right-5 flex flex-col items-end gap-1.5">
+          {["Scroll · Zoom", "Drag · Pan", "Click node · Toggle"].map(h => (
+            <span key={h} className="bg-white border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-400 shadow-sm">{h}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tooltip ── */}
+      <div id="tooltip"
+        className={`bg-white border border-slate-200 rounded-lg shadow-lg px-4 py-3 text-xs font-body ${tip.show ? 'show' : ''}`}
+        style={{ left: tip.x, top: tip.y, minWidth: 168 }}>
+        {tt && <>
+          <p className="font-display font-bold text-slate-800 text-sm mb-0.5">{tt.name}</p>
+          <p className="text-slate-500 mb-2 text-xs">{tt.title}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2 py-0.5 rounded text-xs font-semibold"
+              style={{ background: pal.badge, color: pal.badgeTxt }}>{tt.dept}</span>
+            <span className="text-slate-400 text-xs">📍 {tt.location}</span>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<OrgChart/>);
+</script>
+</body>
+</html>
