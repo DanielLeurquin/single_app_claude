@@ -39,133 +39,166 @@
 <script type="text/babel">
 const { useEffect, useRef, useState, useMemo } = React;
 
-/* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════
    ORG DATA
-   ═══════════════════════════════════════════ */
+   Each person node has:
+     dept        — the department this person belongs to
+     deptParent  — (optional) declares that this person's dept
+                   is a child of another dept. Only needs to
+                   appear on ONE node per dept (the first/head).
+                   This is how the dept hierarchy is declared.
+   ═══════════════════════════════════════════════════════════ */
 const ORG = {
-  id:1, name:"Sarah Chen",      title:"CEO",                  dept:"Executive",   location:"San Francisco",
+  id:1,  name:"Sarah Chen",     title:"CEO",                 dept:"Executive",   location:"San Francisco",
   children:[
-    { id:2,  name:"Marcus Rivera",   title:"CTO",                   dept:"Engineering", location:"Austin",
+    /* Engineering division — parent dept is Executive */
+    { id:2,  name:"Marcus Rivera",  title:"CTO",                  dept:"Engineering", deptParent:"Executive", location:"Austin",
       children:[
-        { id:7,  name:"Priya Nair",      title:"VP Engineering",        dept:"Engineering", location:"Austin",
+        { id:7,  name:"Priya Nair",     title:"VP Engineering",       dept:"Engineering", location:"Austin",
           children:[
-            { id:14, name:"Leon Kim",      title:"Sr. Backend Eng.",      dept:"Engineering", location:"Austin"   },
-            { id:15, name:"Aisha Patel",   title:"Sr. Frontend Eng.",     dept:"Engineering", location:"Remote"   },
-            { id:16, name:"Tom Wallace",   title:"DevOps Engineer",       dept:"Engineering", location:"Remote"   },
+            { id:14, name:"Leon Kim",     title:"Sr. Backend Eng.",     dept:"Engineering", location:"Austin" },
+            { id:15, name:"Aisha Patel",  title:"Sr. Frontend Eng.",    dept:"Engineering", location:"Remote" },
+            { id:16, name:"Tom Wallace",  title:"DevOps Engineer",      dept:"Engineering", location:"Remote" },
           ]},
-        { id:8,  name:"Chris Okafor",    title:"Head of Security",      dept:"Security",    location:"Austin",
+        /* Security is a child dept of Engineering */
+        { id:8,  name:"Chris Okafor",   title:"Head of Security",     dept:"Security",    deptParent:"Engineering", location:"Austin",
           children:[
-            { id:17, name:"Nina Rossi",    title:"Security Analyst",      dept:"Security",    location:"Austin"   },
-            { id:18, name:"Joe Tanaka",    title:"Pen Test Engineer",     dept:"Security",    location:"Remote"   },
-          ]},
-      ]},
-    { id:3,  name:"Elena Vasquez",   title:"CPO",                   dept:"Product",     location:"New York",
-      children:[
-        { id:9,  name:"David Park",      title:"VP Product",            dept:"Product",     location:"New York",
-          children:[
-            { id:19, name:"Leah Brooks",   title:"Product Manager",       dept:"Product",     location:"New York" },
-            { id:20, name:"Sam Torres",    title:"Product Manager",       dept:"Product",     location:"Remote"   },
-          ]},
-        { id:10, name:"Fatima Al-Amin",  title:"Head of UX Research",   dept:"Design",      location:"New York",
-          children:[
-            { id:21, name:"Yuki Sato",     title:"UX Researcher",         dept:"Design",      location:"Tokyo"    },
-            { id:22, name:"Oscar Bell",    title:"UX Researcher",         dept:"Design",      location:"New York" },
+            { id:17, name:"Nina Rossi",   title:"Security Analyst",     dept:"Security",    location:"Austin" },
+            { id:18, name:"Joe Tanaka",   title:"Pen Test Engineer",    dept:"Security",    location:"Remote" },
           ]},
       ]},
-    { id:4,  name:"James Whitmore",  title:"CDO",                   dept:"Design",      location:"London",
+    /* Product division — parent dept is Executive */
+    { id:3,  name:"Elena Vasquez",  title:"CPO",                  dept:"Product",     deptParent:"Executive", location:"New York",
       children:[
-        { id:11, name:"Mia Johansson",   title:"Lead Visual Designer",  dept:"Design",      location:"London"   },
-        { id:12, name:"Ravi Sharma",     title:"Motion Designer",       dept:"Design",      location:"Remote"   },
-      ]},
-    { id:5,  name:"Olivia Grant",    title:"CMO",                   dept:"Marketing",   location:"Chicago",
-      children:[
-        { id:13, name:"Tyler Nguyen",    title:"Growth Lead",           dept:"Marketing",   location:"Chicago",
+        { id:9,  name:"David Park",     title:"VP Product",           dept:"Product",     location:"New York",
           children:[
-            { id:23, name:"Cara Diaz",     title:"Growth Analyst",        dept:"Marketing",   location:"Chicago"  },
-            { id:24, name:"Ben Moore",     title:"SEO Specialist",        dept:"Marketing",   location:"Remote"   },
+            { id:19, name:"Leah Brooks",  title:"Product Manager",      dept:"Product",     location:"New York" },
+            { id:20, name:"Sam Torres",   title:"Product Manager",      dept:"Product",     location:"Remote"   },
+          ]},
+        /* Design is a child dept of Product */
+        { id:10, name:"Fatima Al-Amin", title:"Head of UX Research",  dept:"Design",      deptParent:"Product", location:"New York",
+          children:[
+            { id:21, name:"Yuki Sato",    title:"UX Researcher",        dept:"Design",      location:"Tokyo"    },
+            { id:22, name:"Oscar Bell",   title:"UX Researcher",        dept:"Design",      location:"New York" },
           ]},
       ]},
-    { id:6,  name:"Nathan Adeyemi",  title:"CFO",                   dept:"Finance",     location:"San Francisco",
+    /* James also belongs to Design (same dept, no extra deptParent needed) */
+    { id:4,  name:"James Whitmore", title:"CDO",                  dept:"Design",      location:"London",
       children:[
-        { id:25, name:"Isla Crawford",   title:"Finance Director",      dept:"Finance",     location:"San Francisco"},
-        { id:26, name:"Roy Kim",         title:"Financial Analyst",     dept:"Finance",     location:"Remote"   },
+        { id:11, name:"Mia Johansson",  title:"Lead Visual Designer", dept:"Design",      location:"London" },
+        { id:12, name:"Ravi Sharma",    title:"Motion Designer",      dept:"Design",      location:"Remote" },
+      ]},
+    /* Marketing — parent dept is Executive */
+    { id:5,  name:"Olivia Grant",   title:"CMO",                  dept:"Marketing",   deptParent:"Executive", location:"Chicago",
+      children:[
+        { id:13, name:"Tyler Nguyen",   title:"Growth Lead",          dept:"Marketing",   location:"Chicago",
+          children:[
+            { id:23, name:"Cara Diaz",    title:"Growth Analyst",       dept:"Marketing",   location:"Chicago" },
+            { id:24, name:"Ben Moore",    title:"SEO Specialist",       dept:"Marketing",   location:"Remote"  },
+          ]},
+      ]},
+    /* Finance — parent dept is Executive */
+    { id:6,  name:"Nathan Adeyemi", title:"CFO",                  dept:"Finance",     deptParent:"Executive", location:"San Francisco",
+      children:[
+        { id:25, name:"Isla Crawford",  title:"Finance Director",     dept:"Finance",     location:"San Francisco" },
+        { id:26, name:"Roy Kim",        title:"Financial Analyst",    dept:"Finance",     location:"Remote"        },
       ]},
   ]
 };
 
-/* ═══════════════════════════════════════════
-   DEPT COLOURS — generated dynamically from
-   whatever departments exist in the ORG tree.
-
-   Algorithm:
-   1. Walk the tree to collect unique dept names
-      in the order they first appear (BFS).
-   2. Space hues evenly around the colour wheel,
-      starting at 210° (calm blue) and stepping
-      by the golden-angle-derived offset so
-      adjacent depts are maximally distinct.
-   3. From each hue derive:
-      - bg     : very light tint  (s 60%, l 96%)
-      - border : soft mid tone    (s 70%, l 78%)
-      - label  : dark saturated   (s 80%, l 32%)
-   ═══════════════════════════════════════════ */
-
-function collectDepts(node, seen = [], order = []) {
-  if (!seen.includes(node.dept)) {
-    seen.push(node.dept);
-    order.push(node.dept);
+/* ═══════════════════════════════════════════════════════════
+   DEPT HIERARCHY
+   Derived automatically from deptParent fields in ORG.
+   Returns: { childDept → parentDept } map
+   ═══════════════════════════════════════════════════════════ */
+function extractDeptHierarchy(node, map = {}) {
+  if (node.deptParent && !(node.dept in map)) {
+    map[node.dept] = node.deptParent;
   }
-  (node.children || []).forEach(c => collectDepts(c, seen, order));
-  return order;
+  (node.children || []).forEach(c => extractDeptHierarchy(c, map));
+  return map; // e.g. { Engineering:"Executive", Security:"Engineering", ... }
 }
 
-function hsl(h, s, l) {
-  return `hsl(${h},${s}%,${l}%)`;
+// Returns all ancestor depts of a given dept (closest first)
+function deptAncestors(dept, hierarchy) {
+  const ancestors = [];
+  let cur = hierarchy[dept];
+  while (cur) { ancestors.push(cur); cur = hierarchy[cur]; }
+  return ancestors;
 }
 
-function buildDeptColors(orgRoot) {
-  const depts = collectDepts(orgRoot);
-  const n = depts.length;
-  // Golden-angle step in degrees keeps successive hues far apart
-  const GOLDEN_STEP = 137.5;
-  const START_HUE   = 210;
+// Returns all descendant depts of a given dept
+function deptDescendants(dept, hierarchy) {
+  const desc = [];
+  Object.entries(hierarchy).forEach(([child, parent]) => {
+    if (parent === dept) {
+      desc.push(child);
+      desc.push(...deptDescendants(child, hierarchy));
+    }
+  });
+  return desc;
+}
 
+// Nesting depth: 0 = root dept, 1 = child, 2 = grandchild…
+function deptDepth(dept, hierarchy) {
+  return deptAncestors(dept, hierarchy).length;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DEPT COLOURS — generated dynamically.
+   Parent depts get a lighter bg so children visually sit
+   "inside" them. Label colour stays saturated at all depths.
+   ═══════════════════════════════════════════════════════════ */
+function collectDepts(node, seen = []) {
+  if (!seen.includes(node.dept)) seen.push(node.dept);
+  (node.children || []).forEach(c => collectDepts(c, seen));
+  return seen;
+}
+
+function buildDeptColors(orgRoot, hierarchy) {
+  const depts      = collectDepts(orgRoot);
+  const GOLDEN     = 137.5;
+  const START_HUE  = 210;
   const map = {};
   depts.forEach((dept, i) => {
-    const h = (START_HUE + i * GOLDEN_STEP) % 360;
+    const h     = (START_HUE + i * GOLDEN) % 360;
+    const depth = deptDepth(dept, hierarchy);
+    // Deeper nesting → slightly less light bg so the layering reads clearly
+    const bgL   = Math.max(90, 97 - depth * 3);
     map[dept] = {
-      bg:     hsl(h, 60,  96),
-      border: hsl(h, 55,  78),
-      label:  hsl(h, 70,  30),
+      bg:     `hsl(${h},55%,${bgL}%)`,
+      border: `hsl(${h},55%,72%)`,
+      label:  `hsl(${h},70%,28%)`,
     };
   });
   return map;
 }
 
-const DEPT_COLOR = buildDeptColors(ORG);
+/* These are computed once at module level, before any React code */
+const DEPT_HIERARCHY = extractDeptHierarchy(ORG);
+const DEPT_COLOR     = buildDeptColors(ORG, DEPT_HIERARCHY);
 
-/* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════
    LAYOUT CONSTANTS
-   ═══════════════════════════════════════════ */
-const NW       = 200;  // card width
-const NH       = 76;   // card height
-const H_GAP    = 30;   // horizontal gap between sibling cards
-const V_GAP    = 56;   // vertical gap between levels
-const BOX_PAD  = 22;   // inner padding of dept box (sides + bottom)
-const BOX_TOP  = 36;   // height of dept box label area at top
+   ═══════════════════════════════════════════════════════════ */
+const NW        = 200;  // card width
+const NH        = 76;   // card height
+const H_GAP     = 30;   // horizontal gap between sibling cards
+const V_GAP     = 56;   // vertical gap between levels
+const BOX_PAD   = 22;   // padding inside each dept box
+const BOX_TOP   = 36;   // label bar height at top of dept box
+const PARENT_EXTRA = 18; // extra padding added per nesting level for parent boxes
+const BOX_SEP   = 14;   // min gap between non-ancestor-related dept boxes
 
-/* ═══════════════════════════════════════════
-   STEP 1 — Run D3 tree layout on full tree
-   (ignoring dept collapse for positioning —
-    we hide cards separately)
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   STEP 1 — D3 tree layout
+   ═══════════════════════════════════════════════════════════ */
 function runD3Layout(orgNode) {
   const root = d3.hierarchy(orgNode);
   d3.tree()
     .nodeSize([NW + H_GAP, NH + V_GAP])
     .separation((a, b) => a.parent === b.parent ? 1 : 1.3)
     (root);
-  // Return flat list of {id, x, y, depth, data, parentId}
   const nodes = [];
   root.each(d => {
     nodes.push({
@@ -181,14 +214,14 @@ function runD3Layout(orgNode) {
   return nodes;
 }
 
-/* ═══════════════════════════════════════════
-   STEP 2a — Raw bounding box per dept
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   STEP 2a — Raw bounding box for each dept (from card coords)
+   ═══════════════════════════════════════════════════════════ */
 function computeRawBoxes(nodes) {
   const bounds = {};
   nodes.forEach(n => {
     const d = n.dept;
-    if (!bounds[d]) bounds[d] = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    if (!bounds[d]) bounds[d] = { minX:Infinity, minY:Infinity, maxX:-Infinity, maxY:-Infinity };
     const b = bounds[d];
     b.minX = Math.min(b.minX, n.x);
     b.minY = Math.min(b.minY, n.y);
@@ -208,40 +241,70 @@ function computeRawBoxes(nodes) {
   return boxes;
 }
 
-/* ═══════════════════════════════════════════
-   STEP 2b — Separate non-nested overlapping
-   dept boxes by shifting their nodes sideways.
-   Minimum gap between non-nested box borders.
-   ═══════════════════════════════════════════ */
-const BOX_SEP = 14;
+/* ═══════════════════════════════════════════════════════════
+   STEP 2b — Expand parent dept boxes to enclose their
+   children boxes (recursively, bottom-up).
+   Each parent level adds PARENT_EXTRA padding around its
+   children so nested borders are clearly visible.
+   ═══════════════════════════════════════════════════════════ */
+function expandParentBoxes(boxes, hierarchy) {
+  // Process in order: deepest children first
+  const allDepts = Object.keys(boxes);
 
+  // Sort by depth descending (deepest first) so children are finalized
+  // before their parents try to enclose them
+  const sorted = [...allDepts].sort(
+    (a, b) => deptDepth(b, hierarchy) - deptDepth(a, hierarchy)
+  );
+
+  sorted.forEach(child => {
+    const parent = hierarchy[child];
+    if (!parent || !boxes[parent] || !boxes[child]) return;
+
+    const pb = boxes[parent];
+    const cb = boxes[child];
+    const extra = PARENT_EXTRA;
+
+    // Expand parent to fully contain child + extra breathing room
+    const newX = Math.min(pb.x, cb.x - extra);
+    const newY = Math.min(pb.y, cb.y - extra);
+    const newR = Math.max(pb.x + pb.w, cb.x + cb.w + extra);
+    const newB = Math.max(pb.y + pb.h, cb.y + cb.h + extra);
+
+    boxes[parent] = { ...pb, x: newX, y: newY, w: newR - newX, h: newB - newY };
+  });
+
+  return boxes;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STEP 2c — Separate non-ancestor-related overlapping boxes
+   by shifting their nodes sideways.
+   ═══════════════════════════════════════════════════════════ */
 function separateBoxes(nodes) {
   const xs = {};
   nodes.forEach(n => { xs[n.id] = 0; });
 
   function getBox(dept) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
     nodes.forEach(n => {
       if (n.dept !== dept) return;
       const nx = n.x + xs[n.id];
-      minX = Math.min(minX, nx);
-      minY = Math.min(minY, n.y);
-      maxX = Math.max(maxX, nx + NW);
-      maxY = Math.max(maxY, n.y + NH);
+      minX = Math.min(minX, nx); minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, nx + NW); maxY = Math.max(maxY, n.y + NH);
     });
     if (minX === Infinity) return null;
-    return { x: minX - BOX_PAD, y: minY - BOX_TOP, w: (maxX-minX)+BOX_PAD*2, h: (maxY-minY)+BOX_TOP+BOX_PAD };
+    return { x:minX-BOX_PAD, y:minY-BOX_TOP, w:(maxX-minX)+BOX_PAD*2, h:(maxY-minY)+BOX_TOP+BOX_PAD };
   }
 
   function overlaps(a, b) {
-    return a.x < b.x + b.w && a.x + a.w > b.x &&
-           a.y < b.y + b.h && a.y + a.h > b.y;
+    return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
   }
 
-  function contains(outer, inner) {
-    return outer.x <= inner.x && outer.y <= inner.y &&
-           outer.x + outer.w >= inner.x + inner.w &&
-           outer.y + outer.h >= inner.y + inner.h;
+  function isAncestorRelated(da, db) {
+    // returns true if one is an ancestor of the other in the dept hierarchy
+    return deptAncestors(da, DEPT_HIERARCHY).includes(db) ||
+           deptAncestors(db, DEPT_HIERARCHY).includes(da);
   }
 
   const depts = [...new Set(nodes.map(n => n.dept))];
@@ -249,19 +312,15 @@ function separateBoxes(nodes) {
   for (let pass = 0; pass < 40; pass++) {
     let anyMoved = false;
     for (let i = 0; i < depts.length; i++) {
-      for (let j = i + 1; j < depts.length; j++) {
+      for (let j = i+1; j < depts.length; j++) {
         const da = depts[i], db = depts[j];
+        if (isAncestorRelated(da, db)) continue; // nesting is intentional
         const ba = getBox(da), bb = getBox(db);
         if (!ba || !bb || !overlaps(ba, bb)) continue;
-        if (contains(ba, bb) || contains(bb, ba)) continue;
 
-        // Horizontal overlap to resolve
-        const overlapX = Math.min(ba.x + ba.w, bb.x + bb.w) - Math.max(ba.x, bb.x) + BOX_SEP;
+        const overlapX = Math.min(ba.x+ba.w, bb.x+bb.w) - Math.max(ba.x, bb.x) + BOX_SEP;
         const half = overlapX / 2;
-
-        const caX = ba.x + ba.w / 2;
-        const cbX = bb.x + bb.w / 2;
-        const [leftDept, rightDept] = caX <= cbX ? [da, db] : [db, da];
+        const [leftDept, rightDept] = (ba.x + ba.w/2) <= (bb.x + bb.w/2) ? [da,db] : [db,da];
 
         nodes.forEach(n => {
           if (n.dept === rightDept) xs[n.id] += half;
@@ -276,34 +335,36 @@ function separateBoxes(nodes) {
   return nodes.map(n => ({ ...n, x: n.x + xs[n.id] }));
 }
 
-/* ═══════════════════════════════════════════
-   STEP 2 — Full pipeline
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   STEP 2 — Full box pipeline
+   ═══════════════════════════════════════════════════════════ */
 function computeDeptBoxes(nodes) {
-  return computeRawBoxes(nodes);
+  const raw = computeRawBoxes(nodes);
+  return expandParentBoxes(raw, DEPT_HIERARCHY);
 }
 
-/* ═══════════════════════════════════════════
-   STEP 3 — Build links, rerouting through dept
-   box edges when a node is hidden (collapsed).
-
-   Rules:
-   - If both parent & child are visible → normal card-to-card link
-   - If child is hidden (its dept collapsed) → link goes to top-centre
-     of the child's dept box (the collapsed label bar)
-   - If parent is hidden (its dept collapsed) → link starts from
-     bottom-centre of the parent's dept box
-   - If BOTH are hidden in the SAME dept → skip (internal link, dept box handles it)
-   - If BOTH are hidden in DIFFERENT depts → show dept-box to dept-box link
-   - Deduplicate: one link per unique (sourceDept-or-id → targetDept-or-id) pair
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   STEP 3 — Build links, rerouting through dept boxes when
+   nodes are hidden due to dept collapse.
+   ═══════════════════════════════════════════════════════════ */
 function buildLinks(allNodes, visibleIds, allBoxes, collapsedDepts) {
   const nodeById = Object.fromEntries(allNodes.map(n => [n.id, n]));
 
-  // Helper: resolve the "anchor" for a node.
-  // If visible → its card centre-top/bottom.
-  // If hidden  → the dept box edge.
-  function resolveAnchor(node, side /* 'bottom'|'top' */) {
+  // When a dept is collapsed, find the "effective visible ancestor box"
+  // i.e. walk up the dept hierarchy until we find one that isn't collapsed
+  function effectiveDeptBox(dept) {
+    let d = dept;
+    while (d) {
+      if (!collapsedDepts[d] && allBoxes[d]) return { key: d, box: allBoxes[d] };
+      const parent = DEPT_HIERARCHY[d];
+      if (!parent) break;
+      d = parent;
+    }
+    // If everything is collapsed up to root, use the dept's own box
+    return allBoxes[dept] ? { key: dept, box: allBoxes[dept] } : null;
+  }
+
+  function resolveAnchor(node, side) {
     if (visibleIds.has(node.id)) {
       return {
         key: String(node.id),
@@ -311,14 +372,14 @@ function buildLinks(allNodes, visibleIds, allBoxes, collapsedDepts) {
         y: side === 'bottom' ? node.y + NH : node.y,
       };
     }
-    // node is hidden — use its dept box
-    const box = allBoxes[node.dept];
-    if (!box) return null;
+    const eff = effectiveDeptBox(node.dept);
+    if (!eff) return null;
+    const { key, box } = eff;
     const cx = box.x + box.w / 2;
     return {
-      key: node.dept,
+      key,
       x: cx,
-      y: side === 'bottom' ? box.y + BOX_TOP : box.y, // collapsed box height = BOX_TOP
+      y: side === 'bottom' ? box.y + BOX_TOP : box.y,
     };
   }
 
@@ -333,27 +394,21 @@ function buildLinks(allNodes, visibleIds, allBoxes, collapsedDepts) {
     const parentHidden = !visibleIds.has(parent.id);
     const childHidden  = !visibleIds.has(n.id);
 
-    // Both hidden AND same dept → purely internal, skip
     if (parentHidden && childHidden && parent.dept === n.dept) return;
 
     const from = resolveAnchor(parent, 'bottom');
     const to   = resolveAnchor(n,      'top');
-    if (!from || !to) return;
-
-    // Skip self-loops (both collapsed into the same dept box)
-    if (from.key === to.key) return;
+    if (!from || !to || from.key === to.key) return;
 
     const dedupKey = `${from.key}→${to.key}`;
     if (seen.has(dedupKey)) return;
     seen.add(dedupKey);
 
     links.push({
-      id:  dedupKey,
-      px:  from.x,
-      py:  from.y,
-      cx:  to.x,
-      cy:  to.y,
-      dashed: parentHidden || childHidden, // style differently when rerouted
+      id: dedupKey,
+      px: from.x, py: from.y,
+      cx: to.x,   cy: to.y,
+      dashed: parentHidden || childHidden,
     });
   });
 
@@ -365,33 +420,32 @@ function elbowPath(px, py, cx, cy) {
   return `M${px},${py} L${px},${midY} L${cx},${midY} L${cx},${cy}`;
 }
 
-/* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════
    HELPERS
-   ═══════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════ */
 function initials(name) { return name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase(); }
 function clip(s, n) { return s.length > n ? s.slice(0,n-1)+"…" : s; }
 
-/* Which dept boxes contain which other dept boxes?
-   Used to layer them correctly (outer box behind inner box).
-   Returns sorted dept list: outermost first.            */
+// Sort depts so parents render before (behind) children
 function sortDeptsByNesting(boxes) {
-  const depts = Object.keys(boxes);
-  return depts.sort((a, b) => {
-    const ba = boxes[a], bb = boxes[b];
-    // a is "outer" if it contains b
-    const aContainsB = ba.x <= bb.x && ba.y <= bb.y &&
-      ba.x + ba.w >= bb.x + bb.w && ba.y + ba.h >= bb.y + bb.h;
-    const bContainsA = bb.x <= ba.x && bb.y <= ba.y &&
-      bb.x + bb.w >= ba.x + ba.w && bb.y + bb.h >= ba.y + ba.h;
-    if (aContainsB) return -1;
-    if (bContainsA) return  1;
-    return 0;
-  });
+  return Object.keys(boxes).sort(
+    (a, b) => deptDepth(a, DEPT_HIERARCHY) - deptDepth(b, DEPT_HIERARCHY)
+  );
 }
 
-/* ═══════════════════════════════════════════
-   NodeCard
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   Visibility: a node is hidden if its dept OR any ancestor
+   dept in the hierarchy is collapsed.
+   ═══════════════════════════════════════════════════════════ */
+function isDeptVisible(dept, collapsedDepts) {
+  if (collapsedDepts[dept]) return false;
+  const ancestors = deptAncestors(dept, DEPT_HIERARCHY);
+  return !ancestors.some(a => collapsedDepts[a]);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NodeCard — React component
+   ═══════════════════════════════════════════════════════════ */
 function NodeCard({ data, onMouseEnter, onMouseLeave }) {
   return (
     <div className="card-shell w-full h-full bg-white rounded-md overflow-hidden select-none"
@@ -422,10 +476,10 @@ function NodeCard({ data, onMouseEnter, onMouseLeave }) {
   );
 }
 
-/* ═══════════════════════════════════════════
-   DeptBox
-   ═══════════════════════════════════════════ */
-function DeptBox({ dept, x, y, w, h, collapsed, onToggle }) {
+/* ═══════════════════════════════════════════════════════════
+   DeptBox — React component
+   ═══════════════════════════════════════════════════════════ */
+function DeptBox({ dept, x, y, w, h, collapsed, depth, onToggle }) {
   const p = DEPT_COLOR[dept] || { bg:"#f8fafc", border:"#cbd5e1", label:"#475569" };
   const displayH = collapsed ? BOX_TOP : h;
   return (
@@ -434,11 +488,10 @@ function DeptBox({ dept, x, y, w, h, collapsed, onToggle }) {
         <div style={{
           width:"100%", height:"100%",
           background: collapsed ? "transparent" : p.bg,
-          border:`1.5px dashed ${p.border}`,
-          borderRadius:10,
+          border:`${depth === 0 ? 2 : 1.5}px dashed ${p.border}`,
+          borderRadius: 10 - depth,
           overflow:"hidden",
         }}>
-          {/* Label row */}
           <div className="flex items-center gap-1.5 select-none cursor-pointer"
             style={{ padding:"8px 10px 6px 12px" }}
             onClick={onToggle}
@@ -459,9 +512,9 @@ function DeptBox({ dept, x, y, w, h, collapsed, onToggle }) {
   );
 }
 
-/* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════
    Tooltip
-   ═══════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════ */
 function Tooltip({ tip }) {
   const { show, x, y, d } = tip;
   const p = d ? (DEPT_COLOR[d.dept] || { bg:"#f1f5f9", label:"#475569" }) : {};
@@ -472,9 +525,12 @@ function Tooltip({ tip }) {
       {d && <>
         <p className="font-display font-bold text-slate-800 text-sm mb-0.5">{d.name}</p>
         <p className="text-slate-400 text-xs mb-2">{d.title}</p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="px-2 py-0.5 rounded text-xs font-semibold"
             style={{ background:p.bg, color:p.label }}>{d.dept}</span>
+          {DEPT_HIERARCHY[d.dept] && (
+            <span className="text-slate-300 text-xs">within {DEPT_HIERARCHY[d.dept]}</span>
+          )}
           <span className="text-slate-400 text-xs">📍 {d.location}</span>
         </div>
       </>}
@@ -482,60 +538,77 @@ function Tooltip({ tip }) {
   );
 }
 
-/* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════
    OrgChart — root component
-   ═══════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════ */
 function OrgChart() {
   const svgRef = useRef(null);
-  const zoomRef = useRef(null);
   const [svgTransform, setSvgTransform] = useState("");
   const [collapsedDepts, setCollapsedDepts] = useState({});
   const [tip, setTip] = useState({ show:false, x:0, y:0, d:null });
 
-  /* --- Full layout (computed once, never changes) --- */
+  /* Full layout — computed once */
   const allNodes = useMemo(() => {
     const raw = runD3Layout(ORG);
-    return separateBoxes(raw);   // push non-nested dept boxes apart
+    return separateBoxes(raw);
   }, []);
-  const allBoxes = useMemo(() => computeDeptBoxes(allNodes), [allNodes]);
-  const sortedDepts = useMemo(() => sortDeptsByNesting(allBoxes), [allBoxes]);
 
-  /* --- Visible nodes after applying dept collapse --- */
-  const visibleNodes = useMemo(() => {
-    return allNodes.filter(n => {
-      // A node is hidden if ANY dept in its ancestor chain is collapsed
-      // We check: walk up the tree; if the node's own dept is collapsed, hide it
-      // but keep the "head" of that dept (the topmost member) visible as a placeholder? 
-      // Simpler: just hide all members of a collapsed dept.
-      return !collapsedDepts[n.dept];
-    });
-  }, [allNodes, collapsedDepts]);
+  const allBoxes     = useMemo(() => computeDeptBoxes(allNodes), [allNodes]);
+  const sortedDepts  = useMemo(() => sortDeptsByNesting(allBoxes), [allBoxes]);
+
+  /* Visible nodes: hidden if dept OR any ancestor dept is collapsed */
+  const visibleNodes = useMemo(() =>
+    allNodes.filter(n => isDeptVisible(n.dept, collapsedDepts)),
+    [allNodes, collapsedDepts]
+  );
 
   const visibleIds = useMemo(() => new Set(visibleNodes.map(n => n.id)), [visibleNodes]);
 
-  const links = useMemo(() => buildLinks(allNodes, visibleIds, allBoxes, collapsedDepts), [allNodes, visibleIds, allBoxes, collapsedDepts]);
+  const links = useMemo(() =>
+    buildLinks(allNodes, visibleIds, allBoxes, collapsedDepts),
+    [allNodes, visibleIds, allBoxes, collapsedDepts]
+  );
 
-  /* --- D3 zoom (init once) --- */
+  /* D3 zoom — init once */
   useEffect(() => {
     const svg = d3.select(svgRef.current);
     const W   = svgRef.current.clientWidth;
     const zoom = d3.zoom().scaleExtent([0.1, 2.5])
       .on("zoom", e => setSvgTransform(e.transform.toString()));
-    zoomRef.current = zoom;
     svg.call(zoom);
-    const init = d3.zoomIdentity.translate(W / 2, 48).scale(0.65);
-    svg.call(zoom.transform, init);
+    svg.call(zoom.transform, d3.zoomIdentity.translate(W / 2, 48).scale(0.58));
   }, []);
 
   function toggleDept(dept) {
     setCollapsedDepts(p => ({ ...p, [dept]: !p[dept] }));
   }
-  function expandAll()  { setCollapsedDepts({}); }
+
+  function expandAll() { setCollapsedDepts({}); }
+
   function collapseAll() {
     const all = {};
-    Object.keys(allBoxes).forEach(d => { all[d] = true; });
+    sortedDepts.forEach(d => { all[d] = true; });
     setCollapsedDepts(all);
   }
+
+  // Build legend tree so parent depts show their children indented
+  function buildLegendTree(dept, depth = 0) {
+    const p = DEPT_COLOR[dept] || { label:"#475569", bg:"#f1f5f9" };
+    const children = Object.entries(DEPT_HIERARCHY)
+      .filter(([, parent]) => parent === dept)
+      .map(([child]) => child);
+    return (
+      <div key={dept}>
+        <div className="flex items-center gap-2 mb-1.5" style={{ paddingLeft: depth * 12 }}>
+          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background:p.label }}/>
+          <span className="text-slate-500 text-xs">{dept}</span>
+        </div>
+        {children.map(c => buildLegendTree(c, depth + 1))}
+      </div>
+    );
+  }
+  // Root depts = those with no parent
+  const rootDepts = sortedDepts.filter(d => !DEPT_HIERARCHY[d]);
 
   return (
     <div className="flex flex-col h-screen w-screen font-body" style={{ background:"#f8fafc" }}>
@@ -576,15 +649,17 @@ function OrgChart() {
         <svg ref={svgRef} className="chart-svg">
           <g transform={svgTransform}>
 
-            {/* Dept boxes — outermost first (so inner boxes render on top) */}
+            {/* Dept boxes — parents (depth 0) first so children render on top */}
             {sortedDepts.map(dept => {
               const b = allBoxes[dept];
+              if (!b) return null;
               return (
                 <DeptBox
                   key={dept}
                   dept={dept}
                   x={b.x} y={b.y} w={b.w} h={b.h}
                   collapsed={!!collapsedDepts[dept]}
+                  depth={deptDepth(dept, DEPT_HIERARCHY)}
                   onToggle={() => toggleDept(dept)}
                 />
               );
@@ -592,10 +667,12 @@ function OrgChart() {
 
             {/* Links */}
             {links.map(l => (
-              <path key={l.id} className={l.dashed ? "link-path-dashed" : "link-path"} d={elbowPath(l.px, l.py, l.cx, l.cy)} />
+              <path key={l.id}
+                className={l.dashed ? "link-path-dashed" : "link-path"}
+                d={elbowPath(l.px, l.py, l.cx, l.cy)} />
             ))}
 
-            {/* Cards — only visible ones */}
+            {/* Cards */}
             {visibleNodes.map(n => (
               <foreignObject key={n.id} x={n.x} y={n.y} width={NW} height={NH} style={{ overflow:"visible" }}>
                 <div xmlns="http://www.w3.org/1999/xhtml" style={{ width:NW, height:NH }}>
@@ -611,15 +688,10 @@ function OrgChart() {
           </g>
         </svg>
 
-        {/* Legend */}
+        {/* Legend — shows dept hierarchy with indentation */}
         <div className="absolute bottom-5 left-5 bg-white border border-slate-200 rounded-lg shadow-sm p-3.5">
           <p className="font-display font-bold text-slate-500 mb-2 uppercase tracking-widest" style={{ fontSize:9 }}>Departments</p>
-          {Object.entries(DEPT_COLOR).map(([dept, p]) => (
-            <div key={dept} className="flex items-center gap-2 mb-1.5 last:mb-0">
-              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background:p.label }}/>
-              <span className="text-slate-500 text-xs">{dept}</span>
-            </div>
-          ))}
+          {rootDepts.map(d => buildLegendTree(d, 0))}
         </div>
 
         {/* Hints */}
