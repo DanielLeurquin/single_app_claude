@@ -10,304 +10,499 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-
   <script>
     tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            display: ['Playfair Display', 'serif'],
-            body:    ['Source Sans 3', 'sans-serif'],
-          }
-        }
-      }
+      theme: { extend: { fontFamily: {
+        display: ['Playfair Display','serif'],
+        body:    ['Source Sans 3','sans-serif']
+      }}}
     }
   </script>
-
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body, #root { height: 100%; width: 100%; overflow: hidden; }
-    body { font-family: 'Source Sans 3', sans-serif; }
-
-    .chart-svg { cursor: grab; user-select: none; display: block; width: 100%; height: 100%; }
+    body { font-family: 'Source Sans 3', sans-serif; background: #f8fafc; }
+    .chart-svg { cursor: grab; user-select: none; width: 100%; height: 100%; display: block; }
     .chart-svg:active { cursor: grabbing; }
-
-    .link-path { fill: none; stroke: #94a3b8; stroke-width: 1.5px; }
-
-    /* NodeCard hover — applied to the foreignObject wrapper */
-    .node-fo { overflow: visible; }
-    .node-fo:hover .card-shell {
-      box-shadow: 0 8px 24px rgba(15,23,42,0.13);
-    }
-    .card-shell {
-      transition: box-shadow 0.15s ease, transform 0.15s ease;
-      cursor: pointer;
-    }
-    .card-shell:hover { transform: translateY(-1px); }
-
-    /* Tooltip */
-    #tooltip {
-      position: fixed;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s;
-      z-index: 50;
-    }
-    #tooltip.show { opacity: 1; }
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(10px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
+    .link-path        { fill: none; stroke: #94a3b8; stroke-width: 1.5px; }
+    .link-path-dashed { fill: none; stroke: #94a3b8; stroke-width: 1.5px; stroke-dasharray: 5 3; opacity: 0.55; }
+    .card-shell { transition: box-shadow 0.15s, transform 0.15s; }
+    .card-shell:hover { box-shadow: 0 6px 20px rgba(15,23,42,0.13) !important; transform: translateY(-1px); }
+    #tooltip { position:fixed; pointer-events:none; opacity:0; transition:opacity 0.15s; z-index:999; }
+    #tooltip.show { opacity:1; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
     .chart-area { animation: fadeUp 0.35s ease both; }
   </style>
 </head>
-
-<body class="bg-slate-50">
+<body>
 <div id="root"></div>
-
 <script type="text/babel">
-const { useEffect, useRef, useState, useCallback } = React;
+const { useEffect, useRef, useState, useMemo } = React;
 
-/* ── Data ─────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════
+   ORG DATA
+   ═══════════════════════════════════════════ */
 const ORG = {
-  id:1, name:"Sarah Chen", title:"Chief Executive Officer", dept:"Executive", location:"San Francisco",
+  id:1, name:"Sarah Chen",      title:"CEO",                  dept:"Executive",   location:"San Francisco",
   children:[
-    { id:2, name:"Marcus Rivera", title:"Chief Technology Officer", dept:"Engineering", location:"Austin",
+    { id:2,  name:"Marcus Rivera",   title:"CTO",                   dept:"Engineering", location:"Austin",
       children:[
-        { id:7, name:"Priya Nair", title:"VP Engineering", dept:"Engineering", location:"Austin",
+        { id:7,  name:"Priya Nair",      title:"VP Engineering",        dept:"Engineering", location:"Austin",
           children:[
-            { id:14, name:"Leon Kim",    title:"Sr. Backend Engineer",  dept:"Engineering", location:"Austin" },
-            { id:15, name:"Aisha Patel", title:"Sr. Frontend Engineer", dept:"Engineering", location:"Remote" },
-            { id:16, name:"Tom Wallace", title:"DevOps Engineer",        dept:"Engineering", location:"Remote" },
+            { id:14, name:"Leon Kim",      title:"Sr. Backend Eng.",      dept:"Engineering", location:"Austin"   },
+            { id:15, name:"Aisha Patel",   title:"Sr. Frontend Eng.",     dept:"Engineering", location:"Remote"   },
+            { id:16, name:"Tom Wallace",   title:"DevOps Engineer",       dept:"Engineering", location:"Remote"   },
           ]},
-        { id:8, name:"Chris Okafor", title:"Head of Security", dept:"Engineering", location:"Austin",
+        { id:8,  name:"Chris Okafor",    title:"Head of Security",      dept:"Security",    location:"Austin",
           children:[
-            { id:17, name:"Nina Rossi", title:"Security Analyst",  dept:"Engineering", location:"Austin" },
-            { id:18, name:"Joe Tanaka", title:"Pen Test Engineer",  dept:"Engineering", location:"Remote" },
-          ]},
-      ]},
-    { id:3, name:"Elena Vasquez", title:"Chief Product Officer", dept:"Product", location:"New York",
-      children:[
-        { id:9, name:"David Park", title:"VP Product", dept:"Product", location:"New York",
-          children:[
-            { id:19, name:"Leah Brooks", title:"Product Manager", dept:"Product", location:"New York" },
-            { id:20, name:"Sam Torres",  title:"Product Manager", dept:"Product", location:"Remote"   },
-          ]},
-        { id:10, name:"Fatima Al-Amin", title:"Head of UX Research", dept:"Design", location:"New York",
-          children:[
-            { id:21, name:"Yuki Sato",  title:"UX Researcher", dept:"Design", location:"Tokyo"    },
-            { id:22, name:"Oscar Bell", title:"UX Researcher", dept:"Design", location:"New York" },
+            { id:17, name:"Nina Rossi",    title:"Security Analyst",      dept:"Security",    location:"Austin"   },
+            { id:18, name:"Joe Tanaka",    title:"Pen Test Engineer",     dept:"Security",    location:"Remote"   },
           ]},
       ]},
-    { id:4, name:"James Whitmore", title:"Chief Design Officer", dept:"Design", location:"London",
+    { id:3,  name:"Elena Vasquez",   title:"CPO",                   dept:"Product",     location:"New York",
       children:[
-        { id:11, name:"Mia Johansson", title:"Lead Visual Designer", dept:"Design", location:"London" },
-        { id:12, name:"Ravi Sharma",   title:"Motion Designer",       dept:"Design", location:"Remote" },
-      ]},
-    { id:5, name:"Olivia Grant", title:"Chief Marketing Officer", dept:"Marketing", location:"Chicago",
-      children:[
-        { id:13, name:"Tyler Nguyen", title:"Growth Lead", dept:"Marketing", location:"Chicago",
+        { id:9,  name:"David Park",      title:"VP Product",            dept:"Product",     location:"New York",
           children:[
-            { id:23, name:"Cara Diaz", title:"Growth Analyst", dept:"Marketing", location:"Chicago" },
-            { id:24, name:"Ben Moore", title:"SEO Specialist",  dept:"Marketing", location:"Remote"  },
+            { id:19, name:"Leah Brooks",   title:"Product Manager",       dept:"Product",     location:"New York" },
+            { id:20, name:"Sam Torres",    title:"Product Manager",       dept:"Product",     location:"Remote"   },
+          ]},
+        { id:10, name:"Fatima Al-Amin",  title:"Head of UX Research",   dept:"Design",      location:"New York",
+          children:[
+            { id:21, name:"Yuki Sato",     title:"UX Researcher",         dept:"Design",      location:"Tokyo"    },
+            { id:22, name:"Oscar Bell",    title:"UX Researcher",         dept:"Design",      location:"New York" },
           ]},
       ]},
-    { id:6, name:"Nathan Adeyemi", title:"Chief Financial Officer", dept:"Finance", location:"San Francisco",
+    { id:4,  name:"James Whitmore",  title:"CDO",                   dept:"Design",      location:"London",
       children:[
-        { id:25, name:"Isla Crawford", title:"Finance Director",   dept:"Finance", location:"San Francisco" },
-        { id:26, name:"Roy Kim",        title:"Financial Analyst",  dept:"Finance", location:"Remote"        },
+        { id:11, name:"Mia Johansson",   title:"Lead Visual Designer",  dept:"Design",      location:"London"   },
+        { id:12, name:"Ravi Sharma",     title:"Motion Designer",       dept:"Design",      location:"Remote"   },
+      ]},
+    { id:5,  name:"Olivia Grant",    title:"CMO",                   dept:"Marketing",   location:"Chicago",
+      children:[
+        { id:13, name:"Tyler Nguyen",    title:"Growth Lead",           dept:"Marketing",   location:"Chicago",
+          children:[
+            { id:23, name:"Cara Diaz",     title:"Growth Analyst",        dept:"Marketing",   location:"Chicago"  },
+            { id:24, name:"Ben Moore",     title:"SEO Specialist",        dept:"Marketing",   location:"Remote"   },
+          ]},
+      ]},
+    { id:6,  name:"Nathan Adeyemi",  title:"CFO",                   dept:"Finance",     location:"San Francisco",
+      children:[
+        { id:25, name:"Isla Crawford",   title:"Finance Director",      dept:"Finance",     location:"San Francisco"},
+        { id:26, name:"Roy Kim",         title:"Financial Analyst",     dept:"Finance",     location:"Remote"   },
       ]},
   ]
 };
 
-/* ── Department palette ───────────────────────────────── */
-const DEPT = {
-  Executive:   { stripe:"#3b82f6", badge:"#dbeafe", badgeTxt:"#1e40af", border:"#bfdbfe" },
-  Engineering: { stripe:"#22c55e", badge:"#dcfce7", badgeTxt:"#166534", border:"#bbf7d0" },
-  Product:     { stripe:"#8b5cf6", badge:"#ede9fe", badgeTxt:"#5b21b6", border:"#ddd6fe" },
-  Design:      { stripe:"#ec4899", badge:"#fce7f3", badgeTxt:"#9d174d", border:"#fbcfe8" },
-  Marketing:   { stripe:"#f97316", badge:"#ffedd5", badgeTxt:"#9a3412", border:"#fed7aa" },
-  Finance:     { stripe:"#eab308", badge:"#fef9c3", badgeTxt:"#713f12", border:"#fef08a" },
-  Operations:  { stripe:"#14b8a6", badge:"#ccfbf1", badgeTxt:"#134e4a", border:"#99f6e4" },
+/* ═══════════════════════════════════════════
+   DEPT COLOURS  (boxes only; cards are always white)
+   ═══════════════════════════════════════════ */
+const DEPT_COLOR = {
+  Executive:   { bg:"#eff6ff", border:"#93c5fd", label:"#1d4ed8" },
+  Engineering: { bg:"#f0fdf4", border:"#86efac", label:"#15803d" },
+  Security:    { bg:"#fff7ed", border:"#fdba74", label:"#c2410c" },
+  Product:     { bg:"#faf5ff", border:"#c4b5fd", label:"#7c3aed" },
+  Design:      { bg:"#fdf2f8", border:"#f0abfc", label:"#a21caf" },
+  Marketing:   { bg:"#fff1f2", border:"#fda4af", label:"#be123c" },
+  Finance:     { bg:"#fefce8", border:"#fde047", label:"#a16207" },
 };
 
-/* ── Layout constants ─────────────────────────────────── */
-const NW   = 210;  // card width  (px, also foreignObject width)
-const NH   = 82;   // card height (px, also foreignObject height)
-const HGAP = 32;
-const VGAP = 72;
+/* ═══════════════════════════════════════════
+   LAYOUT CONSTANTS
+   ═══════════════════════════════════════════ */
+const NW       = 200;  // card width
+const NH       = 76;   // card height
+const H_GAP    = 30;   // horizontal gap between sibling cards
+const V_GAP    = 56;   // vertical gap between levels
+const BOX_PAD  = 22;   // inner padding of dept box (sides + bottom)
+const BOX_TOP  = 36;   // height of dept box label area at top
 
-/* ── Helpers ──────────────────────────────────────────── */
-function initials(name) { return name.split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase(); }
-function clip(s, n)     { return s.length > n ? s.slice(0, n-1) + "…" : s; }
-function hasKidsInTree(id, node = ORG) {
-  if (node.id === id) return !!(node.children?.length);
-  return node.children?.some(c => hasKidsInTree(id, c)) ?? false;
+/* ═══════════════════════════════════════════
+   STEP 1 — Run D3 tree layout on full tree
+   (ignoring dept collapse for positioning —
+    we hide cards separately)
+   ═══════════════════════════════════════════ */
+function runD3Layout(orgNode) {
+  const root = d3.hierarchy(orgNode);
+  d3.tree()
+    .nodeSize([NW + H_GAP, NH + V_GAP])
+    .separation((a, b) => a.parent === b.parent ? 1 : 1.3)
+    (root);
+  // Return flat list of {id, x, y, depth, data, parentId}
+  const nodes = [];
+  root.each(d => {
+    nodes.push({
+      id:       d.data.id,
+      parentId: d.parent ? d.parent.data.id : null,
+      dept:     d.data.dept,
+      x:        d.x - NW / 2,
+      y:        d.y,
+      data:     d.data,
+      depth:    d.depth,
+    });
+  });
+  return nodes;
 }
 
-/* Straight elbow path between parent bottom-centre → child top-centre */
-function elbow(sx, sy, tx, ty) {
-  const midY = sy + NH + VGAP / 2;
-  return `M${sx},${sy + NH} L${sx},${midY} L${tx},${midY} L${tx},${ty}`;
+/* ═══════════════════════════════════════════
+   STEP 2a — Raw bounding box per dept
+   ═══════════════════════════════════════════ */
+function computeRawBoxes(nodes) {
+  const bounds = {};
+  nodes.forEach(n => {
+    const d = n.dept;
+    if (!bounds[d]) bounds[d] = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    const b = bounds[d];
+    b.minX = Math.min(b.minX, n.x);
+    b.minY = Math.min(b.minY, n.y);
+    b.maxX = Math.max(b.maxX, n.x + NW);
+    b.maxY = Math.max(b.maxY, n.y + NH);
+  });
+  const boxes = {};
+  Object.entries(bounds).forEach(([dept, b]) => {
+    boxes[dept] = {
+      dept,
+      x: b.minX - BOX_PAD,
+      y: b.minY - BOX_TOP,
+      w: (b.maxX - b.minX) + BOX_PAD * 2,
+      h: (b.maxY - b.minY) + BOX_TOP + BOX_PAD,
+    };
+  });
+  return boxes;
 }
 
-/* ══════════════════════════════════════════════════════
-   NodeCard — standalone React component
-   Receives the person's data + callbacks as props.
-   Rendered inside an SVG <foreignObject> so D3 positions it.
-   ══════════════════════════════════════════════════════ */
-function NodeCard({ data, isRoot, isCollapsed, hasChildren, onToggle, onMouseEnter, onMouseLeave }) {
-  const p = DEPT[data.dept] || DEPT.Executive;
+/* ═══════════════════════════════════════════
+   STEP 2b — Separate non-nested overlapping
+   dept boxes by shifting their nodes sideways.
+   Minimum gap between non-nested box borders.
+   ═══════════════════════════════════════════ */
+const BOX_SEP = 14;
 
+function separateBoxes(nodes) {
+  const xs = {};
+  nodes.forEach(n => { xs[n.id] = 0; });
+
+  function getBox(dept) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    nodes.forEach(n => {
+      if (n.dept !== dept) return;
+      const nx = n.x + xs[n.id];
+      minX = Math.min(minX, nx);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, nx + NW);
+      maxY = Math.max(maxY, n.y + NH);
+    });
+    if (minX === Infinity) return null;
+    return { x: minX - BOX_PAD, y: minY - BOX_TOP, w: (maxX-minX)+BOX_PAD*2, h: (maxY-minY)+BOX_TOP+BOX_PAD };
+  }
+
+  function overlaps(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x &&
+           a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function contains(outer, inner) {
+    return outer.x <= inner.x && outer.y <= inner.y &&
+           outer.x + outer.w >= inner.x + inner.w &&
+           outer.y + outer.h >= inner.y + inner.h;
+  }
+
+  const depts = [...new Set(nodes.map(n => n.dept))];
+
+  for (let pass = 0; pass < 40; pass++) {
+    let anyMoved = false;
+    for (let i = 0; i < depts.length; i++) {
+      for (let j = i + 1; j < depts.length; j++) {
+        const da = depts[i], db = depts[j];
+        const ba = getBox(da), bb = getBox(db);
+        if (!ba || !bb || !overlaps(ba, bb)) continue;
+        if (contains(ba, bb) || contains(bb, ba)) continue;
+
+        // Horizontal overlap to resolve
+        const overlapX = Math.min(ba.x + ba.w, bb.x + bb.w) - Math.max(ba.x, bb.x) + BOX_SEP;
+        const half = overlapX / 2;
+
+        const caX = ba.x + ba.w / 2;
+        const cbX = bb.x + bb.w / 2;
+        const [leftDept, rightDept] = caX <= cbX ? [da, db] : [db, da];
+
+        nodes.forEach(n => {
+          if (n.dept === rightDept) xs[n.id] += half;
+          if (n.dept === leftDept)  xs[n.id] -= half;
+        });
+        anyMoved = true;
+      }
+    }
+    if (!anyMoved) break;
+  }
+
+  return nodes.map(n => ({ ...n, x: n.x + xs[n.id] }));
+}
+
+/* ═══════════════════════════════════════════
+   STEP 2 — Full pipeline
+   ═══════════════════════════════════════════ */
+function computeDeptBoxes(nodes) {
+  return computeRawBoxes(nodes);
+}
+
+/* ═══════════════════════════════════════════
+   STEP 3 — Build links, rerouting through dept
+   box edges when a node is hidden (collapsed).
+
+   Rules:
+   - If both parent & child are visible → normal card-to-card link
+   - If child is hidden (its dept collapsed) → link goes to top-centre
+     of the child's dept box (the collapsed label bar)
+   - If parent is hidden (its dept collapsed) → link starts from
+     bottom-centre of the parent's dept box
+   - If BOTH are hidden in the SAME dept → skip (internal link, dept box handles it)
+   - If BOTH are hidden in DIFFERENT depts → show dept-box to dept-box link
+   - Deduplicate: one link per unique (sourceDept-or-id → targetDept-or-id) pair
+   ═══════════════════════════════════════════ */
+function buildLinks(allNodes, visibleIds, allBoxes, collapsedDepts) {
+  const nodeById = Object.fromEntries(allNodes.map(n => [n.id, n]));
+
+  // Helper: resolve the "anchor" for a node.
+  // If visible → its card centre-top/bottom.
+  // If hidden  → the dept box edge.
+  function resolveAnchor(node, side /* 'bottom'|'top' */) {
+    if (visibleIds.has(node.id)) {
+      return {
+        key: String(node.id),
+        x: node.x + NW / 2,
+        y: side === 'bottom' ? node.y + NH : node.y,
+      };
+    }
+    // node is hidden — use its dept box
+    const box = allBoxes[node.dept];
+    if (!box) return null;
+    const cx = box.x + box.w / 2;
+    return {
+      key: node.dept,
+      x: cx,
+      y: side === 'bottom' ? box.y + BOX_TOP : box.y, // collapsed box height = BOX_TOP
+    };
+  }
+
+  const seen = new Set();
+  const links = [];
+
+  allNodes.forEach(n => {
+    if (n.parentId === null) return;
+    const parent = nodeById[n.parentId];
+    if (!parent) return;
+
+    const parentHidden = !visibleIds.has(parent.id);
+    const childHidden  = !visibleIds.has(n.id);
+
+    // Both hidden AND same dept → purely internal, skip
+    if (parentHidden && childHidden && parent.dept === n.dept) return;
+
+    const from = resolveAnchor(parent, 'bottom');
+    const to   = resolveAnchor(n,      'top');
+    if (!from || !to) return;
+
+    // Skip self-loops (both collapsed into the same dept box)
+    if (from.key === to.key) return;
+
+    const dedupKey = `${from.key}→${to.key}`;
+    if (seen.has(dedupKey)) return;
+    seen.add(dedupKey);
+
+    links.push({
+      id:  dedupKey,
+      px:  from.x,
+      py:  from.y,
+      cx:  to.x,
+      cy:  to.y,
+      dashed: parentHidden || childHidden, // style differently when rerouted
+    });
+  });
+
+  return links;
+}
+
+function elbowPath(px, py, cx, cy) {
+  const midY = py + (cy - py) / 2;
+  return `M${px},${py} L${px},${midY} L${cx},${midY} L${cx},${cy}`;
+}
+
+/* ═══════════════════════════════════════════
+   HELPERS
+   ═══════════════════════════════════════════ */
+function initials(name) { return name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase(); }
+function clip(s, n) { return s.length > n ? s.slice(0,n-1)+"…" : s; }
+
+/* Which dept boxes contain which other dept boxes?
+   Used to layer them correctly (outer box behind inner box).
+   Returns sorted dept list: outermost first.            */
+function sortDeptsByNesting(boxes) {
+  const depts = Object.keys(boxes);
+  return depts.sort((a, b) => {
+    const ba = boxes[a], bb = boxes[b];
+    // a is "outer" if it contains b
+    const aContainsB = ba.x <= bb.x && ba.y <= bb.y &&
+      ba.x + ba.w >= bb.x + bb.w && ba.y + ba.h >= bb.y + bb.h;
+    const bContainsA = bb.x <= ba.x && bb.y <= ba.y &&
+      bb.x + bb.w >= ba.x + ba.w && bb.y + bb.h >= ba.y + ba.h;
+    if (aContainsB) return -1;
+    if (bContainsA) return  1;
+    return 0;
+  });
+}
+
+/* ═══════════════════════════════════════════
+   NodeCard
+   ═══════════════════════════════════════════ */
+function NodeCard({ data, onMouseEnter, onMouseLeave }) {
   return (
-    <div
-      className="card-shell w-full h-full bg-white rounded-md overflow-hidden select-none"
-      style={{
-        border: `1px solid ${isRoot ? p.stripe : p.border}`,
-        borderTopWidth: isRoot ? 2 : 1,
-        boxShadow: isRoot
-          ? "0 4px 14px rgba(15,23,42,0.12)"
-          : "0 1px 6px rgba(15,23,42,0.07)",
-      }}
-      onClick={hasChildren ? onToggle : undefined}
+    <div className="card-shell w-full h-full bg-white rounded-md overflow-hidden select-none"
+      style={{ border:"1px solid #e2e8f0", boxShadow:"0 1px 4px rgba(15,23,42,0.08)" }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Dept colour stripe */}
-      <div className="h-1.5 w-full" style={{ background: p.stripe }} />
-
-      {/* Body */}
-      <div className="flex items-center gap-3 px-3 pt-2 pb-1" style={{ height: NH - 6 }}>
-
-        {/* Avatar */}
-        <div
-          className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold font-display"
-          style={{ background: p.badge, color: p.badgeTxt, border: `1px solid ${p.border}` }}
-        >
+      <div className="h-1 w-full bg-slate-200" />
+      <div className="flex items-center gap-2.5 px-3" style={{ height: NH - 4 }}>
+        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-slate-100 border border-slate-200
+                        flex items-center justify-center font-display font-bold text-slate-500"
+          style={{ fontSize:11 }}>
           {initials(data.name)}
         </div>
-
-        {/* Text */}
         <div className="flex-1 min-w-0">
-          <p
-            className="font-display font-bold text-slate-800 leading-tight truncate"
-            style={{ fontSize: 12 }}
-          >
+          <p className="font-display font-bold text-slate-800 truncate leading-tight" style={{ fontSize:12 }}>
             {data.name}
           </p>
-          <p
-            className="text-slate-500 leading-snug truncate"
-            style={{ fontSize: 10, marginTop: 2, fontFamily: "'Source Sans 3', sans-serif" }}
-          >
-            {clip(data.title, 30)}
+          <p className="text-slate-400 truncate leading-snug font-body" style={{ fontSize:10, marginTop:2 }}>
+            {clip(data.title, 28)}
+          </p>
+          <p className="text-slate-300 font-body" style={{ fontSize:9, marginTop:1 }}>
+            📍 {data.location}
           </p>
         </div>
-
-        {/* Expand / collapse badge */}
-        {hasChildren && (
-          <div
-            className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-white font-bold"
-            style={{ fontSize: 13, background: p.stripe, lineHeight: 1 }}
-          >
-            {isCollapsed ? "+" : "−"}
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════
-   Tooltip component
-   ══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   DeptBox
+   ═══════════════════════════════════════════ */
+function DeptBox({ dept, x, y, w, h, collapsed, onToggle }) {
+  const p = DEPT_COLOR[dept] || { bg:"#f8fafc", border:"#cbd5e1", label:"#475569" };
+  const displayH = collapsed ? BOX_TOP : h;
+  return (
+    <foreignObject x={x} y={y} width={w} height={displayH} style={{ overflow:"visible" }}>
+      <div xmlns="http://www.w3.org/1999/xhtml" style={{ width:w, height:displayH }}>
+        <div style={{
+          width:"100%", height:"100%",
+          background: collapsed ? "transparent" : p.bg,
+          border:`1.5px dashed ${p.border}`,
+          borderRadius:10,
+          overflow:"hidden",
+        }}>
+          {/* Label row */}
+          <div className="flex items-center gap-1.5 select-none cursor-pointer"
+            style={{ padding:"8px 10px 6px 12px" }}
+            onClick={onToggle}
+          >
+            <span style={{ width:8, height:8, borderRadius:"50%", background:p.label, flexShrink:0, display:"inline-block" }}/>
+            <span className="font-display font-bold uppercase"
+              style={{ fontSize:9, color:p.label, letterSpacing:"0.12em" }}>
+              {dept}
+            </span>
+            <span className="ml-auto flex items-center justify-center font-bold"
+              style={{ width:16, height:16, fontSize:14, color:p.label, lineHeight:1, flexShrink:0 }}>
+              {collapsed ? "+" : "−"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </foreignObject>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   Tooltip
+   ═══════════════════════════════════════════ */
 function Tooltip({ tip }) {
   const { show, x, y, d } = tip;
-  const p = d ? (DEPT[d.dept] || DEPT.Executive) : {};
+  const p = d ? (DEPT_COLOR[d.dept] || { bg:"#f1f5f9", label:"#475569" }) : {};
   return (
-    <div
-      id="tooltip"
-      className={`bg-white border border-slate-200 rounded-lg shadow-lg px-4 py-3 font-body ${show ? "show" : ""}`}
-      style={{ left: x, top: y, minWidth: 172 }}
-    >
-      {d && (
-        <>
-          <p className="font-display font-bold text-slate-800 text-sm mb-0.5">{d.name}</p>
-          <p className="text-slate-400 text-xs mb-2">{d.title}</p>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="px-2 py-0.5 rounded text-xs font-semibold"
-              style={{ background: p.badge, color: p.badgeTxt }}
-            >
-              {d.dept}
-            </span>
-            <span className="text-slate-400 text-xs">📍 {d.location}</span>
-          </div>
-        </>
-      )}
+    <div id="tooltip"
+      className={`bg-white border border-slate-200 rounded-lg shadow-xl px-4 py-3 font-body ${show?"show":""}`}
+      style={{ left:x, top:y, minWidth:170 }}>
+      {d && <>
+        <p className="font-display font-bold text-slate-800 text-sm mb-0.5">{d.name}</p>
+        <p className="text-slate-400 text-xs mb-2">{d.title}</p>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded text-xs font-semibold"
+            style={{ background:p.bg, color:p.label }}>{d.dept}</span>
+          <span className="text-slate-400 text-xs">📍 {d.location}</span>
+        </div>
+      </>}
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════
    OrgChart — root component
-   D3 computes layout; React renders everything as JSX.
-   ══════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════ */
 function OrgChart() {
-  const svgRef  = useRef(null);
-  const [transform, setTransform] = useState("translate(0,0) scale(1)");
-  const [nodes,     setNodes]     = useState([]);
-  const [links,     setLinks]     = useState([]);
-  const [collapsed, setCollapsed] = useState({});
-  const [tip,       setTip]       = useState({ show: false, x: 0, y: 0, d: null });
+  const svgRef = useRef(null);
+  const zoomRef = useRef(null);
+  const [svgTransform, setSvgTransform] = useState("");
+  const [collapsedDepts, setCollapsedDepts] = useState({});
+  const [tip, setTip] = useState({ show:false, x:0, y:0, d:null });
 
-  /* Prune invisible children */
-  const buildTree = useCallback(() => {
-    function prune(n) {
-      const c = { ...n };
-      if (!collapsed[n.id] && n.children?.length) c.children = n.children.map(prune);
-      else c.children = [];
-      return c;
-    }
-    return prune(ORG);
-  }, [collapsed]);
+  /* --- Full layout (computed once, never changes) --- */
+  const allNodes = useMemo(() => {
+    const raw = runD3Layout(ORG);
+    return separateBoxes(raw);   // push non-nested dept boxes apart
+  }, []);
+  const allBoxes = useMemo(() => computeDeptBoxes(allNodes), [allNodes]);
+  const sortedDepts = useMemo(() => sortDeptsByNesting(allBoxes), [allBoxes]);
 
-  /* Recompute layout whenever collapsed changes */
-  useEffect(() => {
-    const root = d3.hierarchy(buildTree());
-    d3.tree().nodeSize([NW + HGAP, NH + VGAP]).separation((a,b) => a.parent===b.parent ? 1 : 1.25)(root);
-    setNodes(root.descendants().map(d => ({ ...d.data, x: d.x, y: d.y, depth: d.depth })));
-    setLinks(root.links().map(l => ({
-      id: `${l.source.data.id}-${l.target.data.id}`,
-      sx: l.source.x, sy: l.source.y,
-      tx: l.target.x, ty: l.target.y,
-    })));
-  }, [buildTree]);
-
-  /* Init pan/zoom via D3 — updates React state */
-  useEffect(() => {
-    const svg  = d3.select(svgRef.current);
-    const W    = svgRef.current.clientWidth;
-    const zoom = d3.zoom().scaleExtent([0.18, 2]).on("zoom", e => {
-      setTransform(e.transform.toString());
+  /* --- Visible nodes after applying dept collapse --- */
+  const visibleNodes = useMemo(() => {
+    return allNodes.filter(n => {
+      // A node is hidden if ANY dept in its ancestor chain is collapsed
+      // We check: walk up the tree; if the node's own dept is collapsed, hide it
+      // but keep the "head" of that dept (the topmost member) visible as a placeholder? 
+      // Simpler: just hide all members of a collapsed dept.
+      return !collapsedDepts[n.dept];
     });
+  }, [allNodes, collapsedDepts]);
+
+  const visibleIds = useMemo(() => new Set(visibleNodes.map(n => n.id)), [visibleNodes]);
+
+  const links = useMemo(() => buildLinks(allNodes, visibleIds, allBoxes, collapsedDepts), [allNodes, visibleIds, allBoxes, collapsedDepts]);
+
+  /* --- D3 zoom (init once) --- */
+  useEffect(() => {
+    const svg = d3.select(svgRef.current);
+    const W   = svgRef.current.clientWidth;
+    const zoom = d3.zoom().scaleExtent([0.1, 2.5])
+      .on("zoom", e => setSvgTransform(e.transform.toString()));
+    zoomRef.current = zoom;
     svg.call(zoom);
-    const init = d3.zoomIdentity.translate(W / 2, 48).scale(0.68);
+    const init = d3.zoomIdentity.translate(W / 2, 48).scale(0.65);
     svg.call(zoom.transform, init);
   }, []);
 
-  function toggle(id) { setCollapsed(p => ({ ...p, [id]: !p[id] })); }
+  function toggleDept(dept) {
+    setCollapsedDepts(p => ({ ...p, [dept]: !p[dept] }));
+  }
+  function expandAll()  { setCollapsedDepts({}); }
   function collapseAll() {
-    const ids = {};
-    function walk(n) { if(n.children?.length){ ids[n.id]=true; n.children.forEach(walk); } }
-    walk(ORG);
-    setCollapsed(ids);
+    const all = {};
+    Object.keys(allBoxes).forEach(d => { all[d] = true; });
+    setCollapsedDepts(all);
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-50 font-body">
+    <div className="flex flex-col h-screen w-screen font-body" style={{ background:"#f8fafc" }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <header className="flex items-center justify-between px-8 py-3 bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded border border-slate-200 flex items-center justify-center bg-slate-50">
@@ -327,7 +522,7 @@ function OrgChart() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCollapsed({})}
+          <button onClick={expandAll}
             className="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded text-slate-600 bg-white hover:bg-slate-50 transition-colors">
             Expand All
           </button>
@@ -338,67 +533,65 @@ function OrgChart() {
         </div>
       </header>
 
-      {/* ── Chart canvas ── */}
+      {/* Canvas */}
       <div className="chart-area flex-1 relative overflow-hidden">
         <svg ref={svgRef} className="chart-svg">
+          <g transform={svgTransform}>
 
-          {/* Single <g> moved by D3 zoom transform */}
-          <g transform={transform}>
+            {/* Dept boxes — outermost first (so inner boxes render on top) */}
+            {sortedDepts.map(dept => {
+              const b = allBoxes[dept];
+              return (
+                <DeptBox
+                  key={dept}
+                  dept={dept}
+                  x={b.x} y={b.y} w={b.w} h={b.h}
+                  collapsed={!!collapsedDepts[dept]}
+                  onToggle={() => toggleDept(dept)}
+                />
+              );
+            })}
 
-            {/* Links — plain SVG paths */}
+            {/* Links */}
             {links.map(l => (
-              <path key={l.id} className="link-path"
-                d={elbow(l.sx, l.sy, l.tx, l.ty)} />
+              <path key={l.id} className={l.dashed ? "link-path-dashed" : "link-path"} d={elbowPath(l.px, l.py, l.cx, l.cy)} />
             ))}
 
-            {/* Nodes — each card is a React component inside <foreignObject> */}
-            {nodes.map(n => (
-              <foreignObject
-                key={n.id}
-                className="node-fo"
-                x={n.x - NW / 2}
-                y={n.y}
-                width={NW}
-                height={NH}
-                style={{ overflow: "visible" }}
-              >
-                {/* xmlns required for foreignObject HTML content */}
-                <div xmlns="http://www.w3.org/1999/xhtml" style={{ width: NW, height: NH }}>
+            {/* Cards — only visible ones */}
+            {visibleNodes.map(n => (
+              <foreignObject key={n.id} x={n.x} y={n.y} width={NW} height={NH} style={{ overflow:"visible" }}>
+                <div xmlns="http://www.w3.org/1999/xhtml" style={{ width:NW, height:NH }}>
                   <NodeCard
-                    data={n}
-                    isRoot={n.depth === 0}
-                    isCollapsed={!!collapsed[n.id]}
-                    hasChildren={hasKidsInTree(n.id)}
-                    onToggle={() => toggle(n.id)}
-                    onMouseEnter={e => setTip({ show:true, x:e.clientX+14, y:e.clientY-10, d:n })}
+                    data={n.data}
+                    onMouseEnter={e => setTip({ show:true, x:e.clientX+14, y:e.clientY-10, d:n.data })}
                     onMouseLeave={() => setTip(t => ({ ...t, show:false }))}
                   />
                 </div>
               </foreignObject>
             ))}
+
           </g>
         </svg>
 
         {/* Legend */}
-        <div className="absolute bottom-5 left-5 bg-white border border-slate-200 rounded-lg shadow-sm p-3.5 text-xs">
-          <p className="font-display font-bold text-slate-500 mb-2 uppercase tracking-widest text-xs">Departments</p>
-          {Object.entries(DEPT).map(([dept, p]) => (
+        <div className="absolute bottom-5 left-5 bg-white border border-slate-200 rounded-lg shadow-sm p-3.5">
+          <p className="font-display font-bold text-slate-500 mb-2 uppercase tracking-widest" style={{ fontSize:9 }}>Departments</p>
+          {Object.entries(DEPT_COLOR).map(([dept, p]) => (
             <div key={dept} className="flex items-center gap-2 mb-1.5 last:mb-0">
-              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: p.stripe }}/>
-              <span className="text-slate-500">{dept}</span>
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background:p.label }}/>
+              <span className="text-slate-500 text-xs">{dept}</span>
             </div>
           ))}
         </div>
 
         {/* Hints */}
         <div className="absolute bottom-5 right-5 flex flex-col items-end gap-1.5">
-          {["Scroll · Zoom", "Drag · Pan", "Click node · Toggle"].map(h => (
+          {["Scroll · Zoom","Drag · Pan","Click dept label · Toggle"].map(h => (
             <span key={h} className="bg-white border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-400 shadow-sm">{h}</span>
           ))}
         </div>
       </div>
 
-      {/* Tooltip */}
       <Tooltip tip={tip} />
     </div>
   );
