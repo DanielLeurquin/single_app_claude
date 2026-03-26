@@ -94,17 +94,55 @@ const ORG = {
 };
 
 /* ═══════════════════════════════════════════
-   DEPT COLOURS  (boxes only; cards are always white)
+   DEPT COLOURS — generated dynamically from
+   whatever departments exist in the ORG tree.
+
+   Algorithm:
+   1. Walk the tree to collect unique dept names
+      in the order they first appear (BFS).
+   2. Space hues evenly around the colour wheel,
+      starting at 210° (calm blue) and stepping
+      by the golden-angle-derived offset so
+      adjacent depts are maximally distinct.
+   3. From each hue derive:
+      - bg     : very light tint  (s 60%, l 96%)
+      - border : soft mid tone    (s 70%, l 78%)
+      - label  : dark saturated   (s 80%, l 32%)
    ═══════════════════════════════════════════ */
-const DEPT_COLOR = {
-  Executive:   { bg:"#eff6ff", border:"#93c5fd", label:"#1d4ed8" },
-  Engineering: { bg:"#f0fdf4", border:"#86efac", label:"#15803d" },
-  Security:    { bg:"#fff7ed", border:"#fdba74", label:"#c2410c" },
-  Product:     { bg:"#faf5ff", border:"#c4b5fd", label:"#7c3aed" },
-  Design:      { bg:"#fdf2f8", border:"#f0abfc", label:"#a21caf" },
-  Marketing:   { bg:"#fff1f2", border:"#fda4af", label:"#be123c" },
-  Finance:     { bg:"#fefce8", border:"#fde047", label:"#a16207" },
-};
+
+function collectDepts(node, seen = [], order = []) {
+  if (!seen.includes(node.dept)) {
+    seen.push(node.dept);
+    order.push(node.dept);
+  }
+  (node.children || []).forEach(c => collectDepts(c, seen, order));
+  return order;
+}
+
+function hsl(h, s, l) {
+  return `hsl(${h},${s}%,${l}%)`;
+}
+
+function buildDeptColors(orgRoot) {
+  const depts = collectDepts(orgRoot);
+  const n = depts.length;
+  // Golden-angle step in degrees keeps successive hues far apart
+  const GOLDEN_STEP = 137.5;
+  const START_HUE   = 210;
+
+  const map = {};
+  depts.forEach((dept, i) => {
+    const h = (START_HUE + i * GOLDEN_STEP) % 360;
+    map[dept] = {
+      bg:     hsl(h, 60,  96),
+      border: hsl(h, 55,  78),
+      label:  hsl(h, 70,  30),
+    };
+  });
+  return map;
+}
+
+const DEPT_COLOR = buildDeptColors(ORG);
 
 /* ═══════════════════════════════════════════
    LAYOUT CONSTANTS
