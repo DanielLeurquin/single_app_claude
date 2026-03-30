@@ -145,7 +145,6 @@ const DEPT_COLOR = (() => {
 const NW       = 200;   // card width
 const NH       = 76;    // card height
 const COL_GAP  = 28;    // horizontal gap between cards in same row
-const ROW_H    = NH + 60; // height per depth row (card + vertical breathing room)
 const BOX_PAD  = 18;    // inner padding of dept box
 const BOX_TOP  = 34;    // dept label bar height
 const NEST_PAD = 16;    // extra padding per nesting level
@@ -260,23 +259,74 @@ function buildLayout(orgRoot, collapsedDepts) {
 
   layoutNode(orgRoot, 0, null);
 
-  // Pixel positions for person nodes
-  nodes.forEach(n => {
-    n.x = n.col * (NW + COL_GAP);
-    n.y = n.row * ROW_H;
-  });
-
   /* ─────────────────────────────────────────────────────────
-     Pre-compute the minimum org-tree row for each dept
-     (used for pill vertical positioning).
+     Pre-compute the minimum org-tree row for each dept.
   ───────────────────────────────────────────────────────── */
   const deptFirstRow = {};
+  const deptLastRow  = {};
   function findDeptRows(node, row) {
     const d = node.dept;
     if (deptFirstRow[d] === undefined || row < deptFirstRow[d]) deptFirstRow[d] = row;
+    if (deptLastRow[d]  === undefined || row > deptLastRow[d])  deptLastRow[d]  = row;
     (node.children || []).forEach(c => findDeptRows(c, row + 1));
   }
   findDeptRows(orgRoot, 0);
+
+  /* ─────────────────────────────────────────────────────────
+     Compute dynamic per-row Y positions.
+
+     Between row R and row R+1 there is a vertical gap that
+     must be large enough to fit:
+       • NH (the card height of row R nodes)
+       • The top label bars (BOX_TOP) of every dept box that
+         STARTS at row R+1, multiplied by how many nesting
+         levels deep that dept box sits
+       • A base V_GAP breathing room
+
+     For each transition R → R+1 we find all depts whose
+     first node sits on row R+1.  The required clearance above
+     row R+1 is:
+         max over those depts of:  (deptDepth(dept)+1) * (BOX_TOP + NEST_PAD)
+
+     Row 0 always starts at Y = 0 (no overhead above root).
+  ───────────────────────────────────────────────────────── */
+  const V_GAP_BASE = 28;  // minimum breathing room between rows
+
+  const maxRow = nodes.reduce((m, n) => Math.max(m, n.row), 0);
+  const rowY   = new Array(maxRow + 1).fill(0);
+
+  for (let r = 1; r <= maxRow; r++) {
+    // All depts whose first node is on row r
+    const deptsStartingHere = Object.entries(deptFirstRow)
+      .filter(([, firstR]) => firstR === r)
+      .map(([d]) => d)
+      .filter(d => !isCollapsed(d));  // collapsed depts don't contribute visible box borders
+
+    // Required top-clearance = space needed for nested box label bars
+    // Each nesting level above this dept adds a BOX_TOP + NEST_PAD overhead
+    let topClearance = V_GAP_BASE;
+    deptsStartingHere.forEach(dept => {
+      // Count how many visible ancestor dept boxes also start at or above this row
+      // by walking up the dept hierarchy
+      const visibleAncestorDepts = deptAncestors(dept).filter(a =>
+        !isCollapsed(a) && (deptFirstRow[a] === undefined || deptFirstRow[a] <= r)
+      );
+      // Each such ancestor contributes a BOX_TOP + NEST_PAD worth of vertical space
+      const needed = (visibleAncestorDepts.length + 1) * (BOX_TOP + NEST_PAD) + V_GAP_BASE;
+      topClearance = Math.max(topClearance, needed);
+    });
+
+    // Also account for depts that END at row r-1 and START at row r
+    // (dept boundary crossing — we need clearance for the bottom padding of the
+    //  ending dept AND the top label of the starting dept)
+    rowY[r] = rowY[r - 1] + NH + topClearance;
+  }
+
+  // Assign pixel positions using dynamic row Y values
+  nodes.forEach(n => {
+    n.x = n.col * (NW + COL_GAP);
+    n.y = rowY[n.row];
+  });
 
   const deptOrder = allDeptNames().sort((a,b) => deptDepth(b) - deptDepth(a));
 
@@ -295,7 +345,7 @@ function buildLayout(orgRoot, collapsedDepts) {
       if (col === undefined) return;
       const row = deptFirstRow[dept] ?? 0;
       const px  = col * (NW + COL_GAP);
-      const py  = row * ROW_H;
+      const py  = rowY[row] ?? (row * (NH + V_GAP_BASE));
       boxes[dept] = {
         dept, pill: true,
         x: px + (NW - PILL_W) / 2,
