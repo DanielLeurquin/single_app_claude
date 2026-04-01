@@ -196,8 +196,9 @@ function buildLayout(orgRoot, collapsedDepts) {
      the one slot (only the first node in DFS triggers the pill).
   ───────────────────────────────────────────────────────── */
   let nextCol = 0;
-  const nodes   = [];        // visible person nodes
-  const pillCols = {};       // dept → col index (for collapsed depts)
+  const nodes      = [];   // visible person nodes
+  const pillCols   = {};   // dept → base col index
+  const pillOffsets = {};  // dept → additional x offset (updated by separation pass)
 
   function isCollapsed(dept) {
     return collapsedDepts[dept] || deptAncestors(dept).some(a => collapsedDepts[a]);
@@ -215,7 +216,8 @@ function buildLayout(orgRoot, collapsedDepts) {
 
       if (pillCols[rootCollapsed] === undefined) {
         // First node in this collapsed subtree — claim a column
-        pillCols[rootCollapsed] = nextCol;
+        pillCols[rootCollapsed]    = nextCol;
+        pillOffsets[rootCollapsed] = 0;
         nextCol++;
       }
       // Don't recurse; this whole subtree is hidden
@@ -344,7 +346,7 @@ function buildLayout(orgRoot, collapsedDepts) {
       const col = pillCols[dept];
       if (col === undefined) return;
       const row = deptFirstRow[dept] ?? 0;
-      const px  = col * (NW + COL_GAP);
+      const px  = col * (NW + COL_GAP) + (pillOffsets[dept] || 0);
       const py  = rowY[row] ?? (row * (NH + V_GAP_BASE));
       boxes[dept] = {
         dept, pill: true,
@@ -471,11 +473,54 @@ function buildLayout(orgRoot, collapsedDepts) {
           if (leftLeafs.includes(n.dept))  n.x -= half;
         });
 
+        // Also shift pills that belong to the moved dept groups
+        Object.keys(pillOffsets).forEach(dept => {
+          const belongsRight = rightLeafs.some(r => r === dept || isAncestorDept(r, dept) || dept === rightDept || isAncestorDept(rightDept, dept));
+          const belongsLeft  = leftLeafs.some(l => l === dept || isAncestorDept(l, dept) || dept === leftDept  || isAncestorDept(leftDept,  dept));
+          if (belongsRight) pillOffsets[dept] += half;
+          if (belongsLeft)  pillOffsets[dept] -= half;
+        });
+
         moved = true;
       }
     }
 
     if (!moved) break;
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     Re-centre each parent node over its visible children
+     after the separation pass may have shifted them.
+     Process bottom-up (deepest rows first) so children are
+     already finalised before their parents are adjusted.
+  ───────────────────────────────────────────────────────── */
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const maxRow2 = nodes.reduce((m,n) => Math.max(m, n.row), 0);
+  for (let r = maxRow2 - 1; r >= 0; r--) {
+    nodes.filter(n => n.row === r).forEach(parent => {
+      // Find this node's visible children
+      const children = nodes.filter(n => n.parentId === parent.id);
+      if (children.length === 0) return;
+      const minCX = Math.min(...children.map(c => c.x));
+      const maxCX = Math.max(...children.map(c => c.x + NW));
+      // Also consider pill children of this node's dept
+      const pillChildren = directChildDepts(parent.dept)
+        .filter(d => collapsedDepts[d] && pillCols[d] !== undefined);
+      pillChildren.forEach(d => {
+        const px = pillCols[d] * (NW + COL_GAP) + (pillOffsets[d] || 0) + (NW - PILL_W) / 2;
+        const minPX = Math.min(minCX, px);
+        const maxPX = Math.max(maxCX, px + PILL_W);
+        // update bounds
+        if (minPX < minCX || maxPX > maxCX) {
+          // recalculate centre including pill
+          const allMinX = Math.min(minCX, px);
+          const allMaxX = Math.max(maxCX, px + PILL_W);
+          parent.x = allMinX + (allMaxX - allMinX) / 2 - NW / 2;
+          return;
+        }
+      });
+      parent.x = minCX + (maxCX - minCX) / 2 - NW / 2;
+    });
   }
 
   /* ─────────────────────────────────────────────────────────
@@ -488,17 +533,28 @@ function buildLayout(orgRoot, collapsedDepts) {
 
 /* ═══════════════════════════════════════════════════════════
    LINKS
+   Two sources of links:
+   A) Person-node edges: parent card → child card (existing).
+      When one side is hidden, we reroute to its dept box/pill.
+   B) Dept-box edges: for each collapsed dept pill, draw a link
+      from the nearest visible PARENT DEPT BOX to the pill.
+      This is the "parent dept → collapsed child dept" link
+      the user asked for. We only draw one link per pill
+      (to its immediate parent dept box, not grandparent etc).
    ═══════════════════════════════════════════════════════════ */
 function buildLinks(nodes, deptBoxes, collapsedDepts) {
   const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
 
+  const visibleIds = new Set(nodes.filter(n =>
+    !collapsedDepts[n.dept] && !deptAncestors(n.dept).some(a=>collapsedDepts[a])
+  ).map(n=>n.id));
+
   function effectiveAnchor(node, side) {
     const dept = node.dept;
-    const collapsed = collapsedDepts[dept] || deptAncestors(dept).some(a=>collapsedDepts[a]);
-    if (!collapsed) {
+    const hidden = !visibleIds.has(node.id);
+    if (!hidden) {
       return { key:String(node.id), x:node.x+NW/2, y:side==='bottom'?node.y+NH:node.y };
     }
-    // Find closest collapsed ancestor dept box
     const chain = [dept, ...deptAncestors(dept)];
     for (const d of chain) {
       if (collapsedDepts[d] && deptBoxes[d]) {
@@ -509,11 +565,9 @@ function buildLinks(nodes, deptBoxes, collapsedDepts) {
     return null;
   }
 
-  const visibleIds = new Set(nodes.filter(n => {
-    return !collapsedDepts[n.dept] && !deptAncestors(n.dept).some(a=>collapsedDepts[a]);
-  }).map(n=>n.id));
-
   const seen=new Set(), links=[];
+
+  /* ── A) Person-node edges ── */
   nodes.forEach(n => {
     if (!n.parentId) return;
     const parent = byId[n.parentId];
@@ -529,6 +583,40 @@ function buildLinks(nodes, deptBoxes, collapsedDepts) {
     seen.add(key);
     links.push({ id:key, px:from.x, py:from.y, cx:to.x, cy:to.y, dashed:ph||ch });
   });
+
+  /* ── B) Dept-box → pill edges ──
+     For each collapsed dept pill, find its immediate parent dept.
+     Walk up the dept hierarchy until we find a parent that has a
+     visible (non-collapsed, non-hidden) box, then draw one link
+     from the bottom-centre of that parent box to the top-centre
+     of the pill.                                                  */
+  Object.entries(deptBoxes).forEach(([dept, box]) => {
+    if (!box.pill) return; // only for pills
+
+    // Find the nearest expanded ancestor dept that has a box
+    const ancestors = deptAncestors(dept); // closest first
+    let parentDept = null;
+    for (const anc of ancestors) {
+      if (!collapsedDepts[anc] && deptBoxes[anc] && !deptBoxes[anc].pill) {
+        parentDept = anc;
+        break;
+      }
+    }
+    if (!parentDept) return; // no visible parent box found
+
+    const pb = deptBoxes[parentDept];
+    const fromX = box.x + box.w / 2;
+    const fromY = pb.y + BOX_TOP; // bottom of the parent label bar (top of content area)
+    const toX   = box.x + box.w / 2;
+    const toY   = box.y;
+
+    const key = `deptbox:${parentDept}→${dept}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    links.push({ id:key, px:fromX, py:fromY, cx:toX, cy:toY, dashed:true });
+  });
+
   return links;
 }
 
