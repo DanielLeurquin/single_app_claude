@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Map Status</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0d0d0f;
+    --panel: #16161a;
+    --border: #2a2a32;
+    --green: #22c55e;
+    --orange: #f97316;
+    --red: #ef4444;
+    --unset: #2a2a36;
+    --text: #e2e2e8;
+    --muted: #6b6b7a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: var(--panel);
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.25rem;
+    letter-spacing: 0.04em;
+    color: #fff;
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    transition: border-color 0.15s;
+    user-select: none;
+  }
+
+  .legend-item:hover { border-color: #555; }
+  .legend-item.active { border-color: #888; }
+
+  .legend-dot {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-green  { background: var(--green); }
+  .dot-orange { background: var(--orange); }
+  .dot-red    { background: var(--red); }
+  .dot-unset  { background: var(--unset); border: 1px solid #444; }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: #222; border-color: #555; }
+
+  #active-color-display {
+    font-size: 0.7rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #active-swatch {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .map-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    overflow: hidden;
+  }
+
+  #world-svg {
+    width: 100%;
+    max-width: 1100px;
+    height: auto;
+    display: block;
+  }
+
+  #world-svg path {
+    stroke: #1e1e28;
+    stroke-width: 0.4;
+    cursor: pointer;
+    transition: opacity 0.12s, filter 0.12s;
+  }
+
+  #world-svg path:hover {
+    opacity: 0.75;
+    filter: brightness(1.3);
+  }
+
+  #tooltip {
+    position: fixed;
+    background: #1e1e28;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    padding: 6px 11px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+    z-index: 999;
+    white-space: nowrap;
+  }
+
+  .stats {
+    padding: 8px 28px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    gap: 20px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .stat span { font-weight: 700; }
+  .stat .g { color: var(--green); }
+  .stat .o { color: var(--orange); }
+  .stat .r { color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>WORLD MAP STATUS</h1>
+  <div class="legend">
+    <div class="legend-item active" id="btn-green" onclick="selectColor('green')">
+      <div class="legend-dot dot-green"></div> GREEN
+    </div>
+    <div class="legend-item" id="btn-orange" onclick="selectColor('orange')">
+      <div class="legend-dot dot-orange"></div> ORANGE
+    </div>
+    <div class="legend-item" id="btn-red" onclick="selectColor('red')">
+      <div class="legend-dot dot-red"></div> RED
+    </div>
+    <div class="legend-item" id="btn-unset" onclick="selectColor(null)">
+      <div class="legend-dot dot-unset"></div> CLEAR
+    </div>
+  </div>
+  <div class="toolbar">
+    <div id="active-color-display">
+      Brush: <span id="active-swatch" style="background:var(--green)"></span>
+      <span id="active-label">GREEN</span>
+    </div>
+    <button class="btn" onclick="clearAll()">RESET ALL</button>
+  </div>
+</header>
+
+<div class="map-container">
+  <svg id="world-svg" viewBox="0 0 2000 1001" xmlns="http://www.w3.org/2000/svg">
+    <!-- Paths injected by JS -->
+  </svg>
+</div>
+
+<div class="stats">
+  <div class="stat">GREEN: <span class="g" id="cnt-green">0</span></div>
+  <div class="stat">ORANGE: <span class="o" id="cnt-orange">0</span></div>
+  <div class="stat">RED: <span class="r" id="cnt-red">0</span></div>
+  <div class="stat">UNSET: <span id="cnt-unset">0</span></div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ─── DATA: 2-letter ISO code → color (green | orange | red | null) ──────────
+const countryData = {
+  "AF": null, "AL": null, "DZ": null, "AO": null, "AR": null, "AM": null,
+  "AU": null, "AT": null, "AZ": null, "BS": null, "BD": null, "BY": null,
+  "BE": null, "BZ": null, "BJ": null, "BT": null, "BO": null, "BA": null,
+  "BW": null, "BR": null, "BN": null, "BG": null, "BF": null, "BI": null,
+  "KH": null, "CM": null, "CA": null, "CF": null, "TD": null, "CL": null,
+  "CN": null, "CO": null, "CD": null, "CG": null, "CR": null, "CI": null,
+  "HR": null, "CU": null, "CY": null, "CZ": null, "DK": null, "DJ": null,
+  "DO": null, "EC": null, "EG": null, "SV": null, "GQ": null, "ER": null,
+  "EE": null, "SZ": null, "ET": null, "FJ": null, "FI": null, "FR": null,
+  "GA": null, "GM": null, "GE": null, "DE": null, "GH": null, "GR": null,
+  "GT": null, "GN": null, "GW": null, "GY": null, "HT": null, "HN": null,
+  "HU": null, "IN": null, "ID": null, "IR": null, "IQ": null, "IE": null,
+  "IL": null, "IT": null, "JM": null, "JP": null, "JO": null, "KZ": null,
+  "KE": null, "KP": null, "KR": null, "KW": null, "KG": null, "LA": null,
+  "LV": null, "LB": null, "LS": null, "LR": null, "LY": null, "LT": null,
+  "LU": null, "MG": null, "MW": null, "MY": null, "ML": null, "MR": null,
+  "MX": null, "MD": null, "MN": null, "ME": null, "MA": null, "MZ": null,
+  "MM": null, "NA": null, "NP": null, "NL": null, "NZ": null, "NI": null,
+  "NE": null, "NG": null, "MK": null, "NO": null, "OM": null, "PK": null,
+  "PA": null, "PG": null, "PY": null, "PE": null, "PH": null, "PL": null,
+  "PT": null, "QA": null, "RO": null, "RU": null, "RW": null, "SA": null,
+  "SN": null, "RS": null, "SL": null, "SK": null, "SI": null, "SO": null,
+  "ZA": null, "SS": null, "ES": null, "LK": null, "SD": null, "SR": null,
+  "SE": null, "CH": null, "SY": null, "TW": null, "TJ": null, "TZ": null,
+  "TH": null, "TL": null, "TG": null, "TT": null, "TN": null, "TR": null,
+  "TM": null, "UG": null, "UA": null, "AE": null, "GB": null, "US": null,
+  "UY": null, "UZ": null, "VE": null, "VN": null, "YE": null, "ZM": null,
+  "ZW": null, "IS": null, "PS": null, "XK": null
+};
+
+// ─── Country name lookup ─────────────────────────────────────────────────────
+const countryNames = {
+  AF:"Afghanistan",AL:"Albania",DZ:"Algeria",AO:"Angola",AR:"Argentina",
+  AM:"Armenia",AU:"Australia",AT:"Austria",AZ:"Azerbaijan",BS:"Bahamas",
+  BD:"Bangladesh",BY:"Belarus",BE:"Belgium",BZ:"Belize",BJ:"Benin",
+  BT:"Bhutan",BO:"Bolivia",BA:"Bosnia & Herzegovina",BW:"Botswana",
+  BR:"Brazil",BN:"Brunei",BG:"Bulgaria",BF:"Burkina Faso",BI:"Burundi",
+  KH:"Cambodia",CM:"Cameroon",CA:"Canada",CF:"Central African Rep.",
+  TD:"Chad",CL:"Chile",CN:"China",CO:"Colombia",CD:"DR Congo",
+  CG:"Congo",CR:"Costa Rica",CI:"Côte d'Ivoire",HR:"Croatia",CU:"Cuba",
+  CY:"Cyprus",CZ:"Czech Republic",DK:"Denmark",DJ:"Djibouti",
+  DO:"Dominican Republic",EC:"Ecuador",EG:"Egypt",SV:"El Salvador",
+  GQ:"Equatorial Guinea",ER:"Eritrea",EE:"Estonia",SZ:"Eswatini",
+  ET:"Ethiopia",FJ:"Fiji",FI:"Finland",FR:"France",GA:"Gabon",GM:"Gambia",
+  GE:"Georgia",DE:"Germany",GH:"Ghana",GR:"Greece",GT:"Guatemala",
+  GN:"Guinea",GW:"Guinea-Bissau",GY:"Guyana",HT:"Haiti",HN:"Honduras",
+  HU:"Hungary",IN:"India",ID:"Indonesia",IR:"Iran",IQ:"Iraq",IE:"Ireland",
+  IL:"Israel",IT:"Italy",JM:"Jamaica",JP:"Japan",JO:"Jordan",
+  KZ:"Kazakhstan",KE:"Kenya",KP:"North Korea",KR:"South Korea",KW:"Kuwait",
+  KG:"Kyrgyzstan",LA:"Laos",LV:"Latvia",LB:"Lebanon",LS:"Lesotho",
+  LR:"Liberia",LY:"Libya",LT:"Lithuania",LU:"Luxembourg",MG:"Madagascar",
+  MW:"Malawi",MY:"Malaysia",ML:"Mali",MR:"Mauritania",MX:"Mexico",
+  MD:"Moldova",MN:"Mongolia",ME:"Montenegro",MA:"Morocco",MZ:"Mozambique",
+  MM:"Myanmar",NA:"Namibia",NP:"Nepal",NL:"Netherlands",NZ:"New Zealand",
+  NI:"Nicaragua",NE:"Niger",NG:"Nigeria",MK:"North Macedonia",NO:"Norway",
+  OM:"Oman",PK:"Pakistan",PA:"Panama",PG:"Papua New Guinea",PY:"Paraguay",
+  PE:"Peru",PH:"Philippines",PL:"Poland",PT:"Portugal",QA:"Qatar",
+  RO:"Romania",RU:"Russia",RW:"Rwanda",SA:"Saudi Arabia",SN:"Senegal",
+  RS:"Serbia",SL:"Sierra Leone",SK:"Slovakia",SI:"Slovenia",SO:"Somalia",
+  ZA:"South Africa",SS:"South Sudan",ES:"Spain",LK:"Sri Lanka",SD:"Sudan",
+  SR:"Suriname",SE:"Sweden",CH:"Switzerland",SY:"Syria",TW:"Taiwan",
+  TJ:"Tajikistan",TZ:"Tanzania",TH:"Thailand",TL:"Timor-Leste",TG:"Togo",
+  TT:"Trinidad & Tobago",TN:"Tunisia",TR:"Turkey",TM:"Turkmenistan",
+  UG:"Uganda",UA:"Ukraine",AE:"UAE",GB:"United Kingdom",US:"United States",
+  UY:"Uruguay",UZ:"Uzbekistan",VE:"Venezuela",VN:"Vietnam",YE:"Yemen",
+  ZM:"Zambia",ZW:"Zimbabwe",IS:"Iceland",PS:"Palestine",XK:"Kosovo"
+};
+
+// ─── Color map ────────────────────────────────────────────────────────────────
+const colorMap = {
+  green:  "#22c55e",
+  orange: "#f97316",
+  red:    "#ef4444",
+  null:   "#2a2a36"
+};
+
+let activeColor = "green";
+
+// ─── State ─────────────────────────────────────────────────────────────────
+function selectColor(c) {
+  activeColor = c;
+  document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('active'));
+  const map = { green:'btn-green', orange:'btn-orange', red:'btn-red', null:'btn-unset' };
+  document.getElementById(map[c] || 'btn-unset').classList.add('active');
+
+  const swatch = document.getElementById('active-swatch');
+  const label  = document.getElementById('active-label');
+  if (c) {
+    swatch.style.background = colorMap[c];
+    label.textContent = c.toUpperCase();
+  } else {
+    swatch.style.background = '#2a2a36';
+    label.textContent = 'CLEAR';
+  }
+}
+
+function applyColor(code) {
+  countryData[code] = activeColor;
+  const paths = document.querySelectorAll(`[data-iso="${code}"]`);
+  paths.forEach(p => p.setAttribute('fill', colorMap[activeColor] || colorMap[null]));
+  updateStats();
+}
+
+function clearAll() {
+  Object.keys(countryData).forEach(k => countryData[k] = null);
+  document.querySelectorAll('#world-svg path[data-iso]').forEach(p => {
+    p.setAttribute('fill', colorMap[null]);
+  });
+  updateStats();
+}
+
+function updateStats() {
+  const vals = Object.values(countryData);
+  document.getElementById('cnt-green').textContent  = vals.filter(v=>v==='green').length;
+  document.getElementById('cnt-orange').textContent = vals.filter(v=>v==='orange').length;
+  document.getElementById('cnt-red').textContent    = vals.filter(v=>v==='red').length;
+  document.getElementById('cnt-unset').textContent  = vals.filter(v=>!v).length;
+}
+
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+document.addEventListener('mousemove', e => {
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top  = (e.clientY - 28) + 'px';
+});
+
+// ─── SVG World Map paths (Natural Earth simplified) ───────────────────────────
+// Using SVG path data from simplemaps / natural earth encoded below
+// We'll fetch a free inline SVG from a CDN data URI approach
+// Instead: embed a minimal but complete world map using D3-compatible paths
+// We'll load the world topojson from unpkg and render it via Canvas-less approach
+
+// ISO numeric → alpha-2 lookup
+const numToAlpha2 = {
+  4:"AF",8:"AL",12:"DZ",24:"AO",32:"AR",51:"AM",36:"AU",40:"AT",31:"AZ",
+  44:"BS",50:"BD",112:"BY",56:"BE",84:"BZ",204:"BJ",64:"BT",68:"BO",
+  70:"BA",72:"BW",76:"BR",96:"BN",100:"BG",854:"BF",108:"BI",116:"KH",
+  120:"CM",124:"CA",140:"CF",148:"TD",152:"CL",156:"CN",170:"CO",180:"CD",
+  178:"CG",188:"CR",384:"CI",191:"HR",192:"CU",196:"CY",203:"CZ",208:"DK",
+  262:"DJ",214:"DO",218:"EC",818:"EG",222:"SV",226:"GQ",232:"ER",233:"EE",
+  748:"SZ",231:"ET",242:"FJ",246:"FI",250:"FR",266:"GA",270:"GM",268:"GE",
+  276:"DE",288:"GH",300:"GR",320:"GT",324:"GN",624:"GW",328:"GY",332:"HT",
+  340:"HN",348:"HU",356:"IN",360:"ID",364:"IR",368:"IQ",372:"IE",376:"IL",
+  380:"IT",388:"JM",392:"JP",400:"JO",398:"KZ",404:"KE",408:"KP",410:"KR",
+  414:"KW",417:"KG",418:"LA",428:"LV",422:"LB",426:"LS",430:"LR",434:"LY",
+  440:"LT",442:"LU",450:"MG",454:"MW",458:"MY",466:"ML",478:"MR",484:"MX",
+  498:"MD",496:"MN",499:"ME",504:"MA",508:"MZ",104:"MM",516:"NA",524:"NP",
+  528:"NL",554:"NZ",558:"NI",562:"NE",566:"NG",807:"MK",578:"NO",512:"OM",
+  586:"PK",591:"PA",598:"PG",600:"PY",604:"PE",608:"PH",616:"PL",620:"PT",
+  634:"QA",642:"RO",643:"RU",646:"RW",682:"SA",686:"SN",688:"RS",694:"SL",
+  703:"SK",705:"SI",706:"SO",710:"ZA",728:"SS",724:"ES",144:"LK",729:"SD",
+  740:"SR",752:"SE",756:"CH",760:"SY",158:"TW",762:"TJ",834:"TZ",764:"TH",
+  626:"TL",768:"TG",780:"TT",788:"TN",792:"TR",795:"TM",800:"UG",804:"UA",
+  784:"AE",826:"GB",840:"US",858:"UY",860:"UZ",862:"VE",704:"VN",887:"YE",
+  894:"ZM",716:"ZW",352:"IS",275:"PS",383:"XK",
+};
+
+function renderMap(topo) {
+  const svgEl = document.getElementById('world-svg');
+  const width = 2000, height = 1001;
+
+  const projection = d3.geoNaturalEarth1()
+    .scale(310)
+    .translate([width / 2, height / 2]);
+
+  const path = d3.geoPath().projection(projection);
+  const countries = topojson.feature(topo, topo.objects.countries);
+
+  countries.features.forEach(feature => {
+    const numId = parseInt(feature.id, 10);
+    const iso2  = numToAlpha2[numId] || null;
+    const d     = path(feature);
+    if (!d) return;
+
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    el.setAttribute('d', d);
+    el.setAttribute('fill', iso2 && iso2 in countryData ? colorMap[countryData[iso2]] : colorMap[null]);
+    if (iso2) {
+      el.setAttribute('data-iso', iso2);
+      el.addEventListener('click', () => applyColor(iso2));
+      el.addEventListener('mouseenter', () => {
+        tooltip.style.display = 'block';
+        const name  = countryNames[iso2] || iso2;
+        const color = countryData[iso2] || 'unset';
+        tooltip.textContent = `${name} · ${iso2} · ${color.toUpperCase()}`;
+      });
+      el.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+    }
+    svgEl.appendChild(el);
+  });
+
+  updateStats();
+}
+
+// Load scripts in strict sequence: topojson → d3 → fetch data → render
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+(async function init() {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js');
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js');
+  const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+  const topo = await resp.json();
+  renderMap(topo);
+})();
+</script>
+</body>
+</html>
