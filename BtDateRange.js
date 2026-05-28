@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-// ─── Helpers (module-scoped, not global) ─────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getMonthLong(monthIndex) {
   return new Date(2000, monthIndex, 1).toLocaleString("en-US", { month: "long" });
@@ -19,12 +19,6 @@ function sameDay(a, b) {
   return a && b && a.toDateString() === b.toDateString();
 }
 
-const BTN_STYLE = {
-  background: "none", border: "none", cursor: "pointer",
-  fontSize: "14px", fontWeight: 500, color: "#1e3a5f",
-  padding: "2px 6px", borderRadius: "4px",
-};
-
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function DaysGrid({ viewYear, viewMonth, startDate, endDate, hoverDate, onPick, onHover, onLeave }) {
@@ -38,6 +32,8 @@ function DaysGrid({ viewYear, viewMonth, startDate, endDate, hoverDate, onPick, 
   const hovLo = startDate && hoverDate && !endDate ? (startDate < hoverDate ? startDate : hoverDate) : null;
   const hovHi = startDate && hoverDate && !endDate ? (startDate < hoverDate ? hoverDate : startDate) : null;
 
+  const dayLabels = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
   const cells = [];
   for (let i = 0; i < startDay; i++) cells.push(<div key={`e${i}`} />);
 
@@ -45,42 +41,46 @@ function DaysGrid({ viewYear, viewMonth, startDate, endDate, hoverDate, onPick, 
     const date = new Date(viewYear, viewMonth, d);
     const isStart = lo && sameDay(date, lo);
     const isEnd = (hi && sameDay(date, hi)) || (!endDate && hoverDate && sameDay(date, hoverDate));
-    const inRange = (lo && hi && date > lo && date < hi) || (hovLo && hovHi && date > hovLo && date < hovHi);
+    const inRange =
+      (lo && hi && date > lo && date < hi) ||
+      (hovLo && hovHi && date > hovLo && date < hovHi);
+    const isEdge = isStart || isEnd;
+    const bothEdges = isStart && isEnd;
 
-    let bg = "transparent", color = "#1e3a5f", radius = "4px", fontWeight = "400";
-    if ((isStart || isEnd) && !(isStart && isEnd)) {
-      bg = "#1e3a5f"; color = "#fff"; fontWeight = "500";
-      radius = isStart ? "4px 0 0 4px" : "0 4px 4px 0";
-    } else if (isStart && isEnd) {
-      bg = "#1e3a5f"; color = "#fff"; fontWeight = "500"; radius = "4px";
-    } else if (inRange) {
-      bg = "#e8eef6"; radius = "0";
-    }
+    const cellClass = [
+      "text-center text-[13px] py-[5px] cursor-pointer select-none",
+      bothEdges
+        ? "bg-[#1e3a5f] text-white font-medium rounded"
+        : isStart
+        ? "bg-[#1e3a5f] text-white font-medium rounded-l"
+        : isEnd
+        ? "bg-[#1e3a5f] text-white font-medium rounded-r"
+        : inRange
+        ? "bg-[#e8eef6] text-[#1e3a5f] rounded-none"
+        : "text-[#1e3a5f] rounded hover:bg-[#eef2f8]",
+    ].join(" ");
 
     cells.push(
       <div
         key={d}
+        className={cellClass}
         onClick={() => onPick(date)}
         onMouseEnter={() => onHover(date)}
         onMouseLeave={onLeave}
-        style={{ textAlign: "center", fontSize: "13px", padding: "5px 0", borderRadius: radius,
-          cursor: "pointer", background: bg, color, fontWeight, userSelect: "none" }}
       >
         {d}
       </div>
     );
   }
 
-  const dayLabels = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "4px" }}>
+      <div className="grid grid-cols-7 gap-[2px] mb-1">
         {dayLabels.map(label => (
-          <div key={label} style={{ textAlign: "center", fontSize: "11px", color: "#aaa", padding: "2px 0" }}>{label}</div>
+          <div key={label} className="text-center text-[11px] text-[#aaa] py-[2px]">{label}</div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px" }}>{cells}</div>
+      <div className="grid grid-cols-7 gap-[2px]">{cells}</div>
     </>
   );
 }
@@ -88,17 +88,17 @@ function DaysGrid({ viewYear, viewMonth, startDate, endDate, hoverDate, onPick, 
 function MonthGrid({ viewMonth, onPick }) {
   const months = Array.from({ length: 12 }, (_, i) => ({ index: i, label: getMonthShort(i) }));
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "4px" }}>
+    <div className="grid grid-cols-3 gap-1">
       {months.map(({ index, label }) => (
         <div
           key={index}
           onClick={() => onPick(index)}
-          style={{ textAlign: "center", fontSize: "13px", padding: "8px 2px", borderRadius: "4px",
-            cursor: "pointer", userSelect: "none",
-            background: index === viewMonth ? "#1e3a5f" : "transparent",
-            color: index === viewMonth ? "#fff" : "#1e3a5f",
-            fontWeight: index === viewMonth ? 500 : 400,
-          }}
+          className={[
+            "text-center text-[13px] py-2 rounded cursor-pointer select-none",
+            index === viewMonth
+              ? "bg-[#1e3a5f] text-white font-medium"
+              : "text-[#1e3a5f] hover:bg-[#eef2f8]",
+          ].join(" ")}
         >
           {label}
         </div>
@@ -110,17 +110,17 @@ function MonthGrid({ viewMonth, onPick }) {
 function YearGrid({ viewYear, yearRangeStart, onPick }) {
   const years = Array.from({ length: 12 }, (_, i) => yearRangeStart + i);
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "4px" }}>
+    <div className="grid grid-cols-3 gap-1">
       {years.map(y => (
         <div
           key={y}
           onClick={() => onPick(y)}
-          style={{ textAlign: "center", fontSize: "13px", padding: "8px 2px", borderRadius: "4px",
-            cursor: "pointer", userSelect: "none",
-            background: y === viewYear ? "#1e3a5f" : "transparent",
-            color: y === viewYear ? "#fff" : "#1e3a5f",
-            fontWeight: y === viewYear ? 500 : 400,
-          }}
+          className={[
+            "text-center text-[13px] py-2 rounded cursor-pointer select-none",
+            y === viewYear
+              ? "bg-[#1e3a5f] text-white font-medium"
+              : "text-[#1e3a5f] hover:bg-[#eef2f8]",
+          ].join(" ")}
         >
           {y}
         </div>
@@ -155,13 +155,13 @@ export function BtDateRangePicker({
   const endDate   = value?.max ?? null;
 
   const now = new Date();
-  const [viewYear, setViewYear] = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [viewYear, setViewYear]           = useState(now.getFullYear());
+  const [viewMonth, setViewMonth]         = useState(now.getMonth());
   const [yearRangeStart, setYearRangeStart] = useState(now.getFullYear() - 6);
-  const [view, setView] = useState("days"); // "days" | "months" | "years"
-  const [open, setOpen] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const [hoverDate, setHoverDate] = useState(null);
+  const [view, setView]                   = useState("days"); // "days" | "months" | "years"
+  const [open, setOpen]                   = useState(false);
+  const [isFocused, setIsFocused]         = useState(false);
+  const [hoverDate, setHoverDate]         = useState(null);
 
   const containerRef = useRef(null);
 
@@ -222,71 +222,80 @@ export function BtDateRangePicker({
     }
   }
 
-  const borderColor = isValid === false ? "#dc2626" : isFocused ? "#2563eb" : "#1e3a5f";
-
   const label = startDate && endDate
     ? `${fmtDate(startDate)}  →  ${fmtDate(endDate)}`
     : startDate
     ? `${fmtDate(startDate)}  →  ...`
     : placeholder;
 
+  const boxBorder = isValid === false
+    ? "border-red-600"
+    : isFocused
+    ? "border-blue-600"
+    : "border-[#1e3a5f]";
+
+  const headerBtnClass = "bg-transparent border-none cursor-pointer text-sm font-medium text-[#1e3a5f] px-1.5 py-0.5 rounded hover:bg-[#eef2f8]";
+  const navBtnClass    = "bg-transparent border-none cursor-pointer text-lg text-gray-500 px-1.5 py-0.5 hover:bg-[#eef2f8] rounded";
+
   let headerTitle;
   if (view === "days") {
     headerTitle = (
-      <div style={{ display: "flex", gap: "4px" }}>
-        <button onClick={() => setView("months")} style={BTN_STYLE}>{getMonthLong(viewMonth)}</button>
-        <button onClick={() => setView("years")} style={BTN_STYLE}>{viewYear}</button>
+      <div className="flex gap-1">
+        <button onClick={() => setView("months")} className={headerBtnClass}>{getMonthLong(viewMonth)}</button>
+        <button onClick={() => setView("years")}  className={headerBtnClass}>{viewYear}</button>
       </div>
     );
   } else if (view === "months") {
-    headerTitle = <button onClick={() => setView("years")} style={BTN_STYLE}>{viewYear}</button>;
+    headerTitle = <button onClick={() => setView("years")} className={headerBtnClass}>{viewYear}</button>;
   } else {
     headerTitle = (
-      <span style={{ fontSize: "14px", fontWeight: 500, color: "#1e3a5f" }}>
+      <span className="text-sm font-medium text-[#1e3a5f]">
         {yearRangeStart} – {yearRangeStart + 11}
       </span>
     );
   }
 
   return (
-    <div ref={containerRef} className={className} style={{ position: "relative", display: "inline-block", width: "100%" }}>
+    <div ref={containerRef} className={`relative inline-block w-full ${className}`}>
 
+      {/* Input box */}
       <div
         onClick={toggleOpen}
-        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 8px",
-          borderRadius: "4px", border: `2px solid ${borderColor}`, height: "2rem",
-          cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.75 : 1,
-          background: "#fff", userSelect: "none", boxSizing: "border-box" }}
+        className={[
+          "flex items-center gap-2 px-2 h-8 rounded border-2 border-solid bg-white select-none",
+          boxBorder,
+          disabled ? "opacity-75 cursor-not-allowed" : "cursor-pointer",
+        ].join(" ")}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2"
-          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <svg className="shrink-0 text-gray-400" width="14" height="14" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="3" y="4" width="18" height="18" rx="2"/>
           <line x1="16" y1="2" x2="16" y2="6"/>
           <line x1="8" y1="2" x2="8" y2="6"/>
           <line x1="3" y1="10" x2="21" y2="10"/>
         </svg>
-        <span style={{ flex: 1, fontSize: "13px", color: startDate ? "#1e3a5f" : "#888",
-          overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+        <span className={`flex-1 text-[13px] truncate ${startDate ? "text-[#1e3a5f]" : "text-gray-400"}`}>
           {label}
         </span>
         {startDate && (
-          <span onClick={clearRange} style={{ fontSize: "13px", color: "#aaa", cursor: "pointer" }}>✕</span>
+          <span onClick={clearRange} className="text-[13px] text-gray-300 cursor-pointer hover:text-gray-500">✕</span>
         )}
       </div>
 
+      {/* Error message */}
       {isValid === false && (
-        <p style={{ color: "#dc2626", fontSize: "12px", margin: "2px 0 0" }}>{errorMessage}</p>
+        <p className="text-red-600 text-xs mt-0.5">{errorMessage}</p>
       )}
 
+      {/* Dropdown */}
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 100,
-          background: "#fff", border: "1px solid #dde3ec", borderRadius: "8px", padding: "12px",
-          width: "300px", boxShadow: "0 4px 16px rgba(0,0,0,0.08)", boxSizing: "border-box" }}>
+        <div className="absolute top-[calc(100%+4px)] left-0 z-[100] bg-white border border-[#dde3ec] rounded-lg p-3 w-[300px] shadow-lg">
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-            <button onClick={navPrev} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "18px", color: "#666", padding: "2px 6px" }}>‹</button>
+          {/* Month/year nav header */}
+          <div className="flex items-center justify-between mb-2.5">
+            <button onClick={navPrev} className={navBtnClass}>‹</button>
             {headerTitle}
-            <button onClick={navNext} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "18px", color: "#666", padding: "2px 6px" }}>›</button>
+            <button onClick={navNext} className={navBtnClass}>›</button>
           </div>
 
           {view === "days" && (
@@ -298,7 +307,7 @@ export function BtDateRangePicker({
                 onHover={date => { if (startDate && !endDate) setHoverDate(date); }}
                 onLeave={() => setHoverDate(null)}
               />
-              <p style={{ textAlign: "center", fontSize: "12px", color: "#aaa", margin: "10px 0 0" }}>
+              <p className="text-center text-[12px] text-gray-400 mt-2.5">
                 {(!startDate || endDate) ? "Click to pick start date" : "Click to pick end date"}
               </p>
             </>
@@ -325,8 +334,8 @@ export default function App() {
   const [dateRange, setDateRange] = useState({ min: null, max: null });
 
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 400 }}>
-      <h3 style={{ color: "#1e3a5f", marginBottom: "1rem" }}>Date Range Picker</h3>
+    <div className="font-sans p-8 max-w-sm">
+      <h3 className="text-[#1e3a5f] font-semibold mb-4">Date Range Picker</h3>
 
       <BtDateRangePicker
         value={dateRange}
@@ -334,7 +343,7 @@ export default function App() {
       />
 
       {dateRange.min && dateRange.max && (
-        <p style={{ marginTop: "1rem", fontSize: "13px", color: "#166534" }}>
+        <p className="mt-4 text-[13px] text-green-800">
           ✓ {dateRange.min.toLocaleDateString()} → {dateRange.max.toLocaleDateString()}
         </p>
       )}
